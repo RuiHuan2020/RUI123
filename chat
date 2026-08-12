@@ -98,3 +98,281 @@
 你现在掌握的是SA5的“语法”；缺少的是三个东西：
 
 > **活动工作项的上下文、会议提案的演化过程，以及从标准机制到专利权利要求的转换训练。**
+
+
+你现在不该继续横向读规范了。下一步应当是：**围绕 TR 32.801-01 的 Key Issue 建立框架、缺口表和连续提案管线。**
+
+先纠正一个检索细节：你跟踪的是新草案 **TR 32.801-01《Study on 6G Management and Orchestration》**，不是历史上已经撤销的旧 TR 32.801。该研究项 FS_6G_OAM 属于 Rel-20，计划持续到 2027 年6月；官方工作项在2026年6月记录为20%进度，仍处于早期研究阶段。[FS_6G_OAM工作项](https://portal.3gpp.org/desktopmodules/WorkItem/WorkItemDetails.aspx?workitemId=1100014)
+
+我核对了当前官方 [TR 32.801-01 V0.3.0草案](https://www.3gpp.org/ftp/Specs/archive/32_series/32.801-01/32801-01-030.zip)：知识管理已经列出8个Key Issue，但第8章Solutions基本还是空的。这正是写提案的窗口。
+
+## 一、你需要先建立这张顶层框架
+
+所谓“顶层视角”，不是泛泛谈知识图谱，而是回答六个架构问题：
+
+```text
+1. 为什么需要知识？
+2. 哪些实体创建、提供和消费知识？
+3. 知识管理需要哪些能力？
+4. 知识以什么模型表示？
+5. 知识如何通过MnS交换？
+6. 它与现有数据、MDAS、Intent、CCL、Agent和Cloud是什么关系？
+```
+
+建议你先形成下面这张框架图：
+
+```text
+知识来源
+├─ NRM配置数据
+├─ 性能、KPI、告警、Trace
+├─ MDAS分析结果
+├─ Intent、Policy和CCL执行结果
+└─ Cloud部署、资源、拓扑和可观测性数据
+                │
+                ▼
+       Knowledge Creation
+       知识创建/语义化/推理
+                │
+                ▼
+   Knowledge Management Framework
+   ├─ 表示 Representation
+   ├─ 注册与发现 Discovery
+   ├─ 存储与查询
+   ├─ 交换与提供 Exchange/Provision
+   ├─ 共享与复用 Sharing/Reuse
+   ├─ 生命周期、版本、有效性
+   ├─ 来源与可信度 Provenance/Trust
+   └─ 访问控制与治理
+                │
+                ▼
+          Knowledge MnS
+                │
+                ▼
+知识消费者
+├─ MDAS
+├─ Intent Handling Function
+├─ CCL
+├─ NDT
+├─ Management Agent
+├─ 故障与性能管理功能
+└─ Cloud管理与韧性管理功能
+```
+
+这张图就是你“框架类视角”的核心。然后再把每个框拆成提案。
+
+## 二、TR当前已经帮你列出了8个提案入口
+
+草案7.2节当前包括：
+
+1. Knowledge Representation and Management  
+2. Management Architecture Aspects of Knowledge  
+3. Knowledge Exchange  
+4. Knowledge Provision  
+5. Knowledge Reuse  
+6. Knowledge Sharing  
+7. Knowledge Lifecycle Management  
+8. Ontology  
+
+而且存在大量明确空白：
+
+- Knowledge和Data的关系仍是FFS；
+- 7.2.1需求仍是TBD；
+- Knowledge MnS架构还只有初步描述；
+- 知识交付条件仍是FFS；
+- Knowledge Instance概念仍是FFS；
+- 知识生命周期的操作和状态仍是FFS；
+- Ontology细节和需求仍是TBD；
+- 第8章还没有成形的解决方案。
+
+所以，你不需要凭空找10个题目，只需沿这些空白形成连续提案。
+
+## 三、10篇提案可以这样组成一条主线
+
+不要做10个互不相关的“大创意”。让前面的提案成为后面的基础：
+
+| 提案 | 建议主题 | 主要目标 |
+|---|---|---|
+| 1 | Knowledge Management scope and terminology | 划清Data、Information、Analytics、Knowledge、Ontology边界 |
+| 2 | Top-level Knowledge Management framework | 提出来源、创建、管理、提供、消费的总体框架 |
+| 3 | Knowledge Management capability decomposition | 定义发现、交换、查询、共享、LCM、治理等能力 |
+| 4 | Architecture roles and Knowledge MnS | 定义Creator、Producer、Consumer等角色及SBMA关系 |
+| 5 | Knowledge information model | 定义Knowledge Descriptor/Instance及关键属性 |
+| 6 | Knowledge discovery and exchange procedure | 定义注册、发现、请求、查询和返回流程 |
+| 7 | Knowledge scoping and provisioning | 定义按对象、领域、时间、用途、可信度筛选知识 |
+| 8 | Knowledge lifecycle and provenance | 定义版本、有效、过期、更新、依赖和来源追踪 |
+| 9 | Knowledge sharing and governance | 定义多生产者共享、所有权、并发修改和访问控制 |
+| 10 | Ontology framework and solution mapping | 定义公共本体、领域扩展、映射及外部技术复用原则 |
+
+其中：
+
+- 1—4属于顶层框架类；
+- 5—9属于具体机制；
+- 10负责体系收口及Solution映射。
+
+第一篇不要直接设计API。建议先写：
+
+> **Discussion on the scope, concept boundaries and top-level framework of Knowledge Management**
+
+它最符合领导要求的“顶层视角”，也能为后续9篇建立统一术语。
+
+## 四、第一篇提案应该怎么写
+
+建议采用下面结构：
+
+### 1. Discussion
+
+指出当前草案把“表示、交换、提供、共享、复用、生命周期、Ontology”分别列为Key Issue，但缺少统一关系，例如：
+
+- Knowledge Creation是否属于Knowledge Management？
+- Creator和Producer是否必须是同一实体？
+- Knowledge与源Data是否具有显式依赖关系？
+- Exchange、Provision和Sharing之间有什么区别？
+- Ontology属于知识实例、元数据还是独立管理对象？
+- Knowledge Management与DMFW的边界是什么？
+
+### 2. Observation
+
+总结：
+
+```text
+OBS-1：当前各Key Issue缺少统一能力框架。
+OBS-2：知识与数据的关系尚未定义。
+OBS-3：知识创建和知识提供已被声明为可解耦，但缺少角色模型。
+OBS-4：缺少从知识来源到消费者的端到端视图。
+OBS-5：无法据此判断哪些能力由Knowledge MnS提供。
+```
+
+### 3. Proposal
+
+```text
+Proposal 1：增加Knowledge Management顶层框架。
+Proposal 2：区分Knowledge Creation、Knowledge Management和Knowledge Consumption。
+Proposal 3：定义Knowledge Creator、Knowledge MnS Producer和Consumer角色。
+Proposal 4：增加Knowledge Capability分类。
+Proposal 5：后续Solution以该框架映射到八个Key Issue。
+```
+
+### 4. Proposed text
+
+在TR第7.2节前增加：
+
+```text
+7.2.0 Overview and Framework
+```
+
+内容先保持架构级，不要急着规定RDF字段或者HTTP接口。
+
+## 五、知识管理接下来要补读哪些规范
+
+不要再通读整个28系列，只针对知识消费者读相关章节：
+
+- TS 28.104：MDAS如何生产、消费分析；
+- TS 28.105：AI/ML训练和推理管理；
+- TS 28.312：Intent如何使用支持信息进行决策；
+- TS 28.536、28.567：闭环控制；
+- TR 32.801-01第7.1节：DMFW，重点研究Knowledge和Data边界；
+- TS 28.533：只在设计Knowledge MnS架构时回查；
+- TS 28.622/28.623：只在设计信息模型和Solution Set时回查。
+
+外部技术只做调研和复用判断：
+
+- RDF、OWL、SHACL；
+- Knowledge Graph；
+- Ontology federation；
+- TM Forum相关语义和自治网络工作。
+
+SA5前期讨论中，各公司对“Knowledge是否只是Data Management的一部分”“应该叫Knowledge Management还是Semantic Network Management”就存在明显分歧，这正说明概念边界是当前的核心问题，而非底层格式选择。[SA5 Rel-20 6G OAM讨论材料](https://www.3gpp.org/ftp/Email_Discussions/SA5/SA5-level%20discussions/SA5_Workshop_on_6G_Rel20/SA5_NWM_Discussion_for_Rel-20_6G_OAM_Work_Areas-v0.0.7.pdf)
+
+## 六、Cloud Management怎么放入顶层视角
+
+当前TR中的Cloud部分主要涉及：
+
+- NF Deployment的LCM；
+- Network Slice Subnet/Sub-Network与NF Deployment关系；
+- 3GPP管理系统与外部云编排系统交互；
+- GitOps；
+- 指标、日志、Trace等统一可观测性；
+- 韧性、动态调度和服务连续性。
+
+它可以作为Knowledge Management的一个重要应用域：
+
+```text
+网络层：
+NF、Slice、Service、Alarm、KPI
+
+云层：
+NF Deployment、Workload、资源、故障域、部署状态
+
+跨层知识：
+NF服务
+  ↕
+NF Deployment
+  ↕
+Workload
+  ↕
+Compute/Storage/Network Resource
+```
+
+因此你的顶层关系可以定义为：
+
+> Cloud Management负责产生和使用跨网络—云层的管理知识；Knowledge Management负责表示、关联、提供和维护这些知识。
+
+但不要让Cloud抢走主线。你可以把它作为知识框架的典型Use Case和专利实施例。
+
+## 七、两项专利建议从“机制”切入
+
+两个较自然的发明方向是：
+
+### 专利方向1：依赖感知的知识生命周期管理
+
+核心机制：
+
+- 记录知识与源数据、源知识之间的依赖关系；
+- 数据变化时计算受影响知识；
+- 将知识切换为有效、待验证、陈旧等状态；
+- 根据策略选择继续保留、局部更新或重新生成；
+- 允许知识生命周期与源数据生命周期解耦。
+
+这直接对应KI #7，但不能只专利化“增加状态字段”，重点应是依赖传播和选择性更新机制。
+
+### 专利方向2：面向消费者上下文的知识范围裁剪与增量提供
+
+核心机制：
+
+- Consumer表达对象范围、领域、用途、时间、可信度等上下文；
+- Producer从知识图谱中抽取最小相关子图；
+- 根据知识版本和Consumer已有状态进行增量交付；
+- 在上下文或依赖关系变化时事件触发更新。
+
+它对应KI #3、#4，并具有减少传输量和处理量的技术效果。
+
+这只是发明挖掘方向，不代表已经具备新颖性或标准必要性。必须先完成现有技术检索和公司内部专利评审，并在公开TDoc前完成适当申请。
+
+## 八、你明天就可以开始的动作
+
+1. 建一个8行的Key Issue缺口表：
+
+```text
+Key Issue
+现有文字
+TBD/FFS
+需要回答的问题
+相关基线规范
+候选解决方案
+可形成的提案
+专利潜力
+```
+
+2. 先填7.2.1、7.2.2、7.2.7，这三个能够构成主框架。
+
+3. 画出上面的Knowledge Management Framework。
+
+4. 起草第一篇Discussion Paper：概念边界＋顶层框架＋能力分解。
+
+5. 同步向内部专利人员提交两个发明方向的预披露，不要等10篇提案写完。
+
+你现在真正的第一目标不是“立刻交10篇”，而是先产出：
+
+> **一张框架图、一张Key Issue缺口表、一篇顶层框架提案、两份发明构思单。**
+
+这四样完成后，剩余提案就会从同一个框架中自然拆出来。

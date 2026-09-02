@@ -1,0 +1,105 @@
+结论：这个设计很合理，而且与现稿已有概念能够自然衔接。关键是把它定义成“逻辑分离”，不要要求 Knowledge Base 和 Knowledge Catalogue 必须部署为两个物理网元。
+
+现稿已经提出 Knowledge MnS Producer 可以维护 Knowledge Base，第 125 页进一步定义了 KnowledgeFunction 和 KnowledgeJob。:codex-file-citation{path="C:/Users/Rui/AppData/Local/Temp/32801-01-040_d2clean (2).docx" purpose="source" artifact_kind="document" page_number="124"} :codex-file-citation{path="C:/Users/Rui/AppData/Local/Temp/32801-01-040_d2clean (2).docx" purpose="source" artifact_kind="document" page_number="125"}
+
+### 建议的概念边界
+
+| 实体 | 保存/承担什么 | 回答的问题 |
+|---|---|---|
+| Knowledge Base | Knowledge Content，例如知识图中的 assertions、relationships、rules 及完整 KnowledgeContext | “知识内容是什么？” |
+| Knowledge Catalogue | Knowledge Descriptor，即用于发现、筛选和准入判断的元数据 | “有哪些知识可能可用？” |
+| MnS Registry / MRDF | Knowledge MnS、KnowledgeFunction 或 Catalogue MnS 的 MnSInfo、能力和访问地址 | “哪个服务可以提供知识？” |
+| KnowledgeFunction | 查询、贡献、验证、访问控制、投影、生命周期管理等能力；必要时创建 KnowledgeJob | “如何管理和取得知识？” |
+
+不建议再增加一个独立的 “Knowledge Registry”。现有 MRDF 已负责 MnS 和管理数据能力的注册发现；它适合注册 KnowledgeFunction/Catalogue 的服务能力，但不应保存大量、高频变化的逐条 Knowledge Descriptor。TS 28.533 对 MRDF 的现有职责也是保存 MnSInfo 和管理数据能力信息。:codex-file-citation{path="C:/Users/Rui/AppData/Local/Temp/28533-k00.docx" purpose="source" artifact_kind="document" page_number="43"}
+
+### 隐私保护是否真的成立
+
+成立，但 Catalogue 本身也可能泄露信息。例如，“某区域存在故障根因知识”“某厂商产生了一类异常知识”本身就可能敏感。因此建议采用四级暴露：
+
+1. Registry 层：只暴露服务类型、能力和端点。
+2. Catalogue 基础层：暴露脱敏后的类型、粗粒度范围、状态和访问级别。
+3. Catalogue 授权层：授权后才提供更精确的 Context、健康度、来源摘要等。
+4. Content 层：再次授权后，由 KnowledgeFunction 返回完整知识、子图、摘要或计算结果。
+
+Knowledge Descriptor 可包含：
+
+- opaque `knowledgeId`；
+- knowledge type、ontology/schema reference、version；
+- 经过粗化的 scope 和 KnowledgeContext；
+- lifecycle state、validity 和 Knowledge Health summary；
+- provenance summary；
+- sensitivity/access-policy reference；
+- supported delivery modes；
+- 提供该知识的 KnowledgeFunction 引用。
+
+不应直接包含完整 graph triples、精确拓扑、租户标识、专有推理规则、模型参数或直接的数据库地址。现稿中的 Knowledge Health、validity、scope 和 context 已经为 Descriptor 提供了大部分字段基础，不需要重复定义另一套语义。:codex-file-citation{path="C:/Users/Rui/AppData/Local/Temp/32801-01-040_d2clean (2).docx" purpose="source" artifact_kind="document" page_number="77"} :codex-file-citation{path="C:/Users/Rui/AppData/Local/Temp/32801-01-040_d2clean (2).docx" purpose="source" artifact_kind="document" page_number="78"}
+
+### 推荐的访问流程
+
+```text
+Knowledge MnS Consumer
+        │
+        ├─ 1. 向 MRDF 查询 Knowledge MnS / KnowledgeFunction
+        │
+        ├─ 2. 向 Knowledge Catalogue 查询 Descriptor
+        │
+        ├─ 3. 选择知识并提交 KnowledgeJob
+        │
+        ▼
+KnowledgeFunction
+  ├─ 鉴权、策略与 disclosure-level 判断
+  ├─ 查询 Knowledge Base
+  ├─ 对知识进行过滤、子图投影或聚合
+  └─ 返回授权范围内的 Knowledge Content
+```
+
+这样 Catalogue 负责“发现”，KnowledgeFunction 负责“安全取得”，Base 不直接暴露。
+
+### Deployment scenarios
+
+1. Co-located deployment
+
+KnowledgeFunction、Catalogue 和 Base 部署在同一个 MnF 中，MRDF 为共享基础设施。适合单厂商、单管理域或初期实现；部署简单，但隐私隔离和独立扩展能力有限。
+
+2. Central catalogue with distributed knowledge bases — 推荐的默认方案
+
+各 RAN、CN、切片或厂商域保留自己的 Knowledge Base 和 KnowledgeFunction；运营商级 Catalogue 只聚合经过脱敏的 Descriptor。消费者先从中央 Catalogue 发现知识，再访问实际提供方。知识内容不离开原管理域，最适合数据主权和厂商隐私保护。
+
+3. Federated/hierarchical catalogue
+
+每个行政域维护完整的本地 Catalogue 和 Base；跨域 Catalogue 只交换最小化 Descriptor。对于高度敏感知识，可以不传输内容，而由远端 KnowledgeFunction 执行查询或推理，只返回聚合结果、证明或建议。适合跨运营商和多厂商协作。
+
+4. Embedded/edge deployment
+
+KnowledgeFunction 和小型 Knowledge Base 嵌入 NF、边缘管理功能或域控制器中，Descriptor 同步到域级 Catalogue，服务能力注册到 MRDF。适合低时延、本地自治和知识不能离开设备/站点的场景。
+
+这些部署方式与 TS 28.533 的原则一致：MnF 是逻辑实体，可以独立部署，也可以嵌入 NF。:codex-file-citation{path="C:/Users/Rui/AppData/Local/Temp/28533-k00.docx" purpose="source" artifact_kind="document" page_number="14"}
+
+### 可直接加入文稿的英文方案
+
+9.2.2.3 Potential Solution#3: Knowledge Catalogue-assisted Discovery and Controlled Exposure
+
+This solution separates the discovery information associated with knowledge from the Knowledge Content.
+
+A Knowledge Base is a logical repository that maintains Knowledge Content. Knowledge Content may comprise machine-interpretable assertions, relationships, rules and the complete context associated with one or more Knowledge instances.
+
+A Knowledge Catalogue is a logical repository or service that maintains Knowledge Descriptors for the purpose of knowledge discovery and selection. A Knowledge Descriptor identifies a Knowledge instance or a collection of Knowledge instances without necessarily exposing the corresponding Knowledge Content. It may include the knowledge type, ontology or schema reference, version, summarized scope and context, provenance summary, lifecycle state, validation and knowledge-health summary, access-policy reference, supported delivery modes, and a reference to the KnowledgeFunction providing access to the Knowledge Content.
+
+The exposure of a Knowledge Descriptor is subject to access control. Different representations of the same Knowledge Descriptor may be exposed to different MnS consumers. Sensitive context information may be omitted, redacted or represented at a coarser granularity. A Knowledge Descriptor should not contain Knowledge Content or information that enables an MnS consumer to bypass the KnowledgeFunction.
+
+A KnowledgeFunction provides knowledge-related management capabilities. It may maintain or access a Knowledge Catalogue and one or more Knowledge Bases. The KnowledgeFunction performs authorization and disclosure-policy evaluation, processes KnowledgeJobs, retrieves the applicable Knowledge Content, and provides an authorized projection, subset, aggregation or result to the MnS consumer.
+
+The MnS Registry is used to register and discover the MnS instances and capabilities provided by the KnowledgeFunction or the Knowledge Catalogue. Individual Knowledge Descriptors are maintained in the Knowledge Catalogue rather than in the MnS Registry.
+
+The following deployment options may be supported:
+
+a) the KnowledgeFunction, Knowledge Catalogue and Knowledge Base are co-located in the same Management Function;
+
+b) a centralized Knowledge Catalogue is used with distributed KnowledgeFunctions and Knowledge Bases located in different management domains;
+
+c) domain-specific Knowledge Catalogues are federated, with only authorized and minimized Knowledge Descriptors exchanged across administrative-domain boundaries; and
+
+d) the KnowledgeFunction and Knowledge Base are embedded in a Network Function or domain-specific Management Function, while selected Knowledge Descriptors are published to a domain-level Knowledge Catalogue.
+
+The Knowledge Catalogue and Knowledge Base are logical entities and their definition does not mandate physical separation.

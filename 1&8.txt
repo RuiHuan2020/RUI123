@@ -1,0 +1,46 @@
+1. Ontology是知识表示的语义层，ontology的目的是让不同知识生产者和消费者对概念、关系及约束具有一致的机器可解释含义。
+2. Ontology需要包括概念定义（如ManagedEntity）、关系定义（如subClassOf、hostedOn）、属性定义（如confidence\severity）、语义约束（range(affects) = ManagedEntity）等，还需要本体的标识（ontologyId、ontologyVersion、namespace）
+3. Ontology应该进行映射而不是定义所有，如
+3GPP Common Management Ontology
+        ↓
+RAN Ontology / Core Ontology / Cloud Ontology
+        ↓
+Use-case-specific Ontology
+        ↓
+Vendor Extension Ontology（怎么映射？）
+
+
+Knowledge Representation=Structure+Ontology-reference+Knowledge Instances?
+- 其中
+KnowledgeInstance
+├── KnowledgeDescriptor
+│   ├── knowledgeId
+│   ├── knowledgeType
+│   ├── ontologyReference(A knowledge instance shall be associated with the semantic specification required to interpret its knowledge content.)
+│   ├── producer
+│   ├── provenance
+│   ├── version
+│   ├── lifecycleState
+│   ├── scope
+│   ├── applicability(networkDomain、deploementMode、softwareVersion)
+│   ├── validTime
+│   ├── quality
+│   └── accessPolicy
+│
+└── KnowledgeContent
+      └── KnowledgeElement(s) [1..*]
+        ├── KnowledgeAssertion(knowledge assertion: a machine-interpretable assertion concerning an entity, a property of an entity, or a relationship between entities.)
+        │   ├── assertionExpression
+        │   ├── element-level context（如针对单个KnowledgeElement的confidence、provenance、evidence、applicability）
+        │   
+        │
+        └── KnowledgeRule(knowledge rule: a machine-interpretable knowledge element that specifies a conclusion that may be derived or an action that may be determined when one or more conditions are satisfied.)
+            ├── condition
+            ├── conclusion
+            ├── element-level context
+将来如果确实需要，还可以扩展：
+- causal model；
+- procedure；
+- policy；
+- semantic model；
+- predictive model。

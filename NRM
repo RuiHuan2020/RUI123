@@ -1,0 +1,17 @@
+7.5.2 Key Issue #2: NRM Improvements for NF Deployments
+
+This key issue is related to the requirements specified in REQ-CMO-2 and focuses on whether and how the Network Resource Model (NRM) can be improved to support NF Deployments.
+
+Changes to an NF Deployment may occur while the identity of the associated 3GPP NF remains unchanged. The NRM needs to be studied to determine how to represent the associations between 3GPP NFs and NF Deployments and maintain their consistency throughout lifecycle changes.
+
+This key issue focuses on the following aspects:
+
+1. Whether and how the NRM should represent associations between 3GPP NFs and NF Deployments, including the supported association cardinalities and the identification of NF Deployments managed by external orchestration and management systems.
+
+2. Whether and how these associations should be maintained consistently during lifecycle changes, including creation, upgrade, replacement, scaling and termination of NF Deployments, and how transitional associations should be represented where applicable.
+
+3. Whether and how the NRM should represent situations where an association cannot be verified or is no longer valid, distinguishing temporary unavailability of information from confirmed termination of the associated NF Deployment.
+
+4. Whether and what association information, including temporal validity information where needed, should be represented to support the correct attribution of management data following association changes.
+
+NOTE: The aspects related to management data attribution address the association information needed in the NRM. Mechanisms for correlating observability data are addressed in Key Issue #3 on Network Functions Observability.

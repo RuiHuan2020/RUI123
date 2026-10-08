@@ -1,0 +1,855 @@
+# 3GPP SA5 云管理的发展历程与完整教程
+
+**3GPP SA5 云管理的演进，可以概括为：先解决电信网管与 NFV 平台的协同，再建立服务化管理框架，随后支持容器化网络功能，最后将管理对象扩展到与具体云技术解耦的 NF Deployment。** 贯穿这些阶段的问题始终是：如何把电信网络的功能、配置和业务质量要求，转换为部署与运行管理动作，并保持两侧的信息一致。
+
+以下按你要求的“总—分—总”展开，覆盖发展历程、架构、标准体系和完整管理流程。
+
+资料核验截至 **2026 年 10 月 7 日**。规范内容主要依据你指定的 iTecSpec 正文章节，Release、正式版本和变更批准状态则与 3GPP 官方记录交叉核对。你给出的 **TS 28.313 §6.4.1.3.3** 实际讲的是 5G SON 中邻区关系增删通知；它可以作为规范阅读入口，但云管理的核心资料是下面介绍的规范。([itecspec.com][1])
+
+有一处资料边界需要说明：iTecSpec 的部分正文落后于官方最新版本。对于 Release 20 的 NF Deployment 新增内容，我已核实正式版本和批准 CR；未能取得最新版完整正文的部分，下面只说明可核实的落标范围，并明确区分研究方案与正式要求。
+
+---
+
+# 一、总：先建立完整的历史框架
+
+## 1. SA5 云管理到底管理什么？
+
+理解这个问题，首先要把“电信网络功能”和“运行它的软件及资源”分开。
+
+以 UPF 为例：
+
+* 电信侧关心：它属于哪个网络、提供什么功能、如何配置、与哪些网络功能连接、性能是否满足要求。
+* 部署侧关心：运行哪个软件版本、创建多少实例、如何扩容、如何替换故障组件。
+* 基础设施侧关心：计算、存储和网络资源是否足够，节点和集群如何维护。
+
+**SA5 的核心任务，是规范电信管理及其与部署编排系统的协同。** 在 TR 28.869 的云管理研究边界中，云基础设施管理本身，以及部署管理参考点的具体接口实现，都不属于 3GPP 要统一规定的范围。([itecspec.com][2])
+
+因此，不能把“SA5 云管理”理解为一套完整的 Kubernetes 集群管理规范；也不能仅把它理解为几个网元配置接口。它涉及需求、架构、信息模型、管理服务、生命周期过程、通知，以及运行数据的关联。
+
+## 2. 发展历程总览
+
+下面的年份表示主要研究或落标时期，不表示一个 Release 内所有相关规范都在同一天完成。
+
+| 阶段         | 主要时期 / Release            | 当时要解决的问题                        | 核心标准或材料                                                       |
+| ---------- | ------------------------- | ------------------------------- | ------------------------------------------------------------- |
+| 传统电信管理基础   | NFV 专项之前                  | 管理网元、配置、告警和性能，建立分层网管架构          | TS 32.101、TS 32.102                                           |
+| 虚拟化影响研究    | 2015 年，Rel-13             | 网元成为软件后，电信网管如何感知虚拟资源及生命周期变化     | **TR 32.842**                                                 |
+| NFV 管理规范化  | 2015—2017 年，Rel-14        | 电信管理与 ETSI NFV-MANO 如何协同        | **TS 28.500**；TS 28.510—28.528 中的四组管理规范                       |
+| 5G 服务化管理   | 2017—2018 年起，Rel-15       | 用管理服务统一支持网络、网络功能和切片管理           | TR 28.800、TR 28.801；**TS 28.530、28.531、28.532、28.533、28.541** |
+| 边缘与自动化能力发展 | Rel-16、Rel-17 及后续         | 分布式部署、边缘业务、策略和意图如何纳入管理          | TR 28.803；TS 28.538、28.311、28.312、28.104                      |
+| 容器化 VNF 管理 | Rel-18                    | 既有管理架构和 MANO 流程如何适配容器化网络功能      | **TR 28.834**；TS 28.526、28.531、28.533 的相关增强                   |
+| 更广泛的云编排协同  | Rel-19 启动研究，正式报告归入 Rel-20 | 如何支持 MANO 及其他编排系统，并区分 NF 与其软件部署 | **TR 28.869**；Rel-20 NF Deployment LCM 工作                     |
+| 6G 管理研究    | 2026 年，Rel-20 研究阶段        | 更高层生命周期、跨域可观测性及云环境韧性            | **TR 32.801-01，仍为草案**                                         |
+
+早期研究与规范化的依据包括 Rel-13 的虚拟化研究报告和随后形成的 NFV 管理规范族；5G Provisioning 的正式 Rel-15 版本则于 2018 年形成。([iTecSpec][3])
+
+其中有两个容易被写错的历史节点：
+
+1. **Rel-18 已经有容器化 VNF 管理的规范增强**，不能只写“做了一份 TR 28.834 研究”。
+2. **TR 28.869 虽然按 Rel-19 启动，但正式 V20.0.0 已归入 Rel-20**；相关 NF Deployment 内容也已有正式 TS 变更，不能把整个方向都写成“仍处于研究”。([itecspec.com][4])
+
+---
+
+# 二、分：按发展阶段学习原理、标准和实际流程
+
+## 1. 入门基础：先分清管理对象
+
+很多理解偏差来自把“功能”“部署”“实例”“资源”当成同一个东西。
+
+| 概念                      | 含义                     | 在教程中的理解方式                 |
+| ----------------------- | ---------------------- | ------------------------- |
+| **NF：Network Function** | 具有规定功能行为和 3GPP 接口的网络功能 | UPF、AMF、SMF 等功能           |
+| **NE：Network Element**  | 电信管理中的网元               | 被网管识别和管理的网络实体             |
+| **PNF**                 | 采用物理设备实现的网络功能          | 功能实现与物理设备结合               |
+| **VNF**                 | 虚拟化的软件网络功能             | 软件功能及其部署、生命周期管理对象         |
+| **VNFC**                | VNF 的组成组件              | 一个 VNF 可以具有多个组件           |
+| **NF Deployment**       | 用于实现网络功能的软件部署抽象        | 把“提供什么电信功能”与“如何部署软件”分开    |
+| **IOC**                 | 信息对象类                  | 管理模型中的类型，例如 `UPFFunction` |
+| **MOI**                 | 管理对象实例                 | 某个具体 UPF 在网管模型中的对象        |
+| **DN**                  | 管理对象的可区分名称             | 用于定位某个 MOI                |
+| **ETSI NS**             | NFV 中的 Network Service | 对网络功能及连接关系的编排对象           |
+| **NSI / NSSI**          | 网络切片实例 / 网络切片子网实例      | 3GPP 切片管理对象               |
+
+这里有三点必须掌握。
+
+**第一，VNF 并不专指虚拟机。** TR 28.869 对 ETSI 术语的核对明确指出，VNF 可以采用容器化实现。把 VNF 一律理解为 VM，会误读后续容器化管理工作。([iTecSpec][5])
+
+**第二，网元与 VNF 的对应关系需要根据实现确定。** TS 28.500 讨论了 NE 与 VNF 的关系；只有在 VNF 包含整个网元功能等相应条件下，才形成特定的一对一关系。不能预设“一个网元永远等于一个 VNF、一个 VM 或一个 Pod”。([iTecSpec][6])
+
+**第三，NF Deployment 也不等于 Kubernetes 的 `Deployment` 对象。** TR 28.869 §4.2.1 提出的研究概念，可以承载一个或多个 NF 的部分或全部功能，并且不限定 VM 或容器技术。该章节同时注明，研究中的定义仍需在规范阶段进一步确定，因此这里讲的是研究提出的抽象，不能冒充最新版 TS 的逐字定义。([iTecSpec][7])
+
+实际做管理系统时，应保留几类对象之间的映射：
+
+> 电信管理对象 → 软件部署实例 → 软件组件 → 底层运行资源。
+
+后续告警关联、扩缩容同步和退网，都依赖这些映射。
+
+---
+
+## 2. 第一阶段：从传统网元管理到 NFV 管理
+
+### 2.1 为什么传统网管需要改变？
+
+传统管理架构已经能够处理配置、告警和性能，TS 32.101、TS 32.102 分别提供管理原则和架构基础。虚拟化引入的变化是：**电信功能的变化与承载资源的变化开始具有各自的生命周期。**([iTecSpec][8])
+
+例如：
+
+* UPF 软件还在运行，但所在虚拟资源出现故障；
+* VNF 扩容增加了组件，网管中的对象信息尚未更新；
+* 软件已实例化，但电信功能配置尚未完成；
+* 云资源性能正常，电信业务性能却不满足要求。
+
+因此，需要协同两种管理视角：电信功能管理与虚拟化部署管理。
+
+### 2.2 Rel-13：TR 32.842 研究了哪些问题？
+
+**TR 32.842：Study on network management of virtualized networks** 是这条主线的重要起点。
+
+它的用例覆盖：
+
+* 虚拟资源故障与 VNF、网元故障的关系；
+* 实例化、扩容和升级后的应用配置；
+* 电信功能性能与虚拟资源性能；
+* VNF、Network Service 及其描述文件的生命周期。
+
+这些用例说明，SA5 当时研究的是虚拟化对整个管理体系的影响，而不仅是“如何创建一台 VM”。([iTecSpec][3])
+
+### 2.3 Rel-14：TS 28.500 建立协同架构
+
+**TS 28.500** 的作用，是给出包含 VNF 的移动网络管理概念、架构和要求。
+
+其中的关键角色和参考点可以这样理解：
+
+| 角色 / 参考点        | 作用                                   |
+| --------------- | ------------------------------------ |
+| **NM**          | 网络级管理，承担或对接 OSS/BSS 侧管理职责            |
+| **EM / DM**     | 网元或域管理，管理应用相关功能                      |
+| **NFVO**        | NFV 编排器，负责 Network Service 和资源编排相关职责 |
+| **VNFM**        | VNF 管理器，负责 VNF 生命周期管理                |
+| **VIM**         | 虚拟化基础设施管理器，管理相应基础设施资源                |
+| **Itf-N**       | NM 与 EM/DM 之间的电信管理参考点                |
+| **Os-Ma-nfvo**  | OSS/BSS、NM 侧与 NFVO 的参考点              |
+| **Ve-Vnfm-em**  | EM 与 VNFM 的参考点                       |
+| **Ve-Vnfm-vnf** | VNF 与 VNFM 的参考点                      |
+
+TS 28.500 将应用相关管理与 MANO 协同联系起来；NFVO、VNFM、VIM 的具体架构职责则来自 ETSI NFV。([itecspec.com][9])
+
+一个重要的理解是：**EM 和 VNFM 可以同时管理同一个 VNF 的不同方面。**
+
+* EM 关心电信应用的配置、告警和性能。
+* VNFM 关心实例化、扩缩容、恢复和终止等生命周期动作。
+* 双方通过参考点交换请求和状态，避免各自掌握的信息互相矛盾。
+
+### 2.4 Rel-14 的四组标准：不仅有架构，还有完整管理规范
+
+| 管理领域           |            要求 |            流程 |       Stage 2 |       Stage 3 |
+| -------------- | ------------: | ------------: | ------------: | ------------: |
+| **配置管理 CM**    | TS **28.510** | TS **28.511** | TS **28.512** | TS **28.513** |
+| **故障管理 FM**    | TS **28.515** | TS **28.516** | TS **28.517** | TS **28.518** |
+| **性能管理 PM**    | TS **28.520** | TS **28.521** | TS **28.522** | TS **28.523** |
+| **生命周期管理 LCM** | TS **28.525** | TS **28.526** | TS **28.527** | TS **28.528** |
+
+这四组规范构成了早期 SA5 NFV 管理的主要规范体系。([portal.3gpp.org][10])
+
+四种文档分工也很重要：
+
+* **要求**：系统必须具备哪些管理能力。
+* **流程**：谁发起动作、谁执行、何时通知、如何同步。
+* **Stage 2**：逻辑接口、操作及交换的信息。
+* **Stage 3**：具体实现层面的协议或解决方案。
+
+所以，理解一项管理功能时，只看“流程图”或只看“信息模型”都不够。
+
+---
+
+## 3. 第二阶段：Rel-15 建立 5G 服务化管理框架
+
+### 3.1 为什么需要 SBMA？
+
+5G 管理需要同时面对网络功能、网络子网、切片和通信服务。SA5 将管理能力进一步组织为可提供、可消费的 **Management Service，MnS**。
+
+相关研究包括：
+
+* **TR 28.800**：下一代网络和服务的管理编排架构研究；
+* **TR 28.801**：网络切片管理编排研究。
+
+规范框架则主要落在以下文件中。([iTecSpec][11])
+
+| 标准号                    | 核心作用                     | 在实际系统中回答的问题             |
+| ---------------------- | ------------------------ | ----------------------- |
+| **TS 28.530**          | 管理编排概念、用例和要求             | 需要管理什么，满足什么需求           |
+| **TS 28.531**          | Provisioning，提供相关管理能力和流程 | 如何创建、修改、删除 NF，以及分配和修改切片 |
+| **TS 28.532**          | 通用管理服务                   | 如何操作对象、报告数据、进行通用管理交互    |
+| **TS 28.533**          | 管理架构框架                   | 管理能力如何组成、提供和消费          |
+| **TS 28.540**          | 5G NRM Stage 1           | 5G 网络资源模型的要求            |
+| **TS 28.541**          | 5G NRM Stage 2、Stage 3   | NF、接口端点和其他资源如何表达        |
+| **TS 28.622 / 28.623** | 通用 NRM 及其解决方案            | 提供可复用的通用管理模型基础          |
+
+这套体系把“管理能力”“被管理对象”和“具体操作”组织成可组合的框架。([iTecSpec][12])
+
+### 3.2 MnS、MnF 和服务生产者、消费者
+
+依据 TS 28.533 §4.1：
+
+* **MnS producer**：提供管理服务的实体。
+* **MnS consumer**：消费管理服务的实体。
+* **MnF**：Management Function，承担管理职责的逻辑功能。
+
+生产者和消费者是一次服务关系中的角色，不是固定的产品分类。例如，NF 管理功能对 OSS 提供 Provisioning 服务时是生产者；它调用 MANO 生命周期接口时，又是消费者。([itecspec.com][13])
+
+还需要区分两个容易混淆的“服务化”：
+
+* **5GC 的 SBA** 描述核心网功能之间的服务交互。
+* **SA5 的 SBMA** 描述管理功能之间的管理服务交互。
+
+这两者服务的对象和职责不同。
+
+### 3.3 MnS 的 A、B、C 三类组件
+
+| 组件      | 含义                 | 例子                    |
+| ------- | ------------------ | --------------------- |
+| **A 类** | 与具体网络类型无关的操作、通知    | 创建、读取、修改和删除管理对象       |
+| **B 类** | 表达被管理实体的信息模型，即 NRM | `UPFFunction`、通用管理对象类 |
+| **C 类** | 被管理实体的性能和故障信息      | 测量数据、告警信息             |
+
+这一划分分别对应 TS 28.533 §4.2.2、§4.2.3.1、§4.2.3.2。([itecspec.com][14])
+
+用 UPF 举例：
+
+* `createMOI` 属于操作层面的能力；
+* `UPFFunction` 告诉系统创建的是什么对象；
+* UPF 的性能与告警数据描述这个对象运行得如何。
+
+TS 28.541 §5.3.3.1 明确规定，`UPFFunction` IOC 表示 5GC 中的 UPF 功能。**它是管理模型，不是容器部署文件。**([iTecSpec][15])
+
+### 3.4 服务化管理如何与云编排连接？
+
+下面是按相关架构整理的责任示意图，便于理解，并非规范原图：
+
+```mermaid
+flowchart TD
+    A["OSS 或上层管理功能"] -->|"消费 MnS"| B["NF 管理服务生产者"]
+    B -->|"应用配置、性能、故障管理"| C["3GPP 网络功能"]
+    B -->|"部署需求与生命周期交互"| D["ETSI NFV-MANO"]
+    B -->|"部署需求与生命周期交互"| E["其他编排管理系统"]
+    D --> F["软件工作负载与运行资源"]
+    E --> F
+    F -->|"承载并实现"| C
+```
+
+历史上，MANO 是明确规定的协同路径；后续 NF Deployment 工作扩大了对其他编排管理系统的支持范围。对上层而言，管理需求仍围绕电信 NF 表达；对下层而言，需要将这些需求转换为具体部署动作。([itecspec.com][16])
+
+---
+
+## 4. 第三阶段：边缘、策略、意图与分析成为配套能力
+
+这些工作与云管理紧密相关，但属于并行发展的能力，不能全部算作一个单独的“云管理项目”。
+
+### 4.1 边缘计算管理
+
+主要资料包括：
+
+* **TR 28.803，Rel-16**：边缘计算管理方面的研究；
+* **TS 28.538，初始 Rel-17**：Edge Computing Management；
+* **TR 28.903，Rel-18**：与 ETSI MEC 管理的对齐研究。
+
+TR 28.803 讨论过 UPF 部署、相关网络功能配置及边缘部署关系。TS 28.538 的范围进一步覆盖边缘计算的生命周期、Provisioning、性能保障和故障监督。([itecspec.com][17])
+
+边缘带来的变化是：部署位置成为业务能否满足要求的重要因素。
+
+例如，一个园区业务的 UPF 部署决策，需要考虑接近业务位置、网络连接和容量。仅仅证明“云里能启动这个软件”还不够。
+
+### 4.2 策略、意图与管理数据分析
+
+| 能力         | 相关标准          | 与云管理的关系           |
+| ---------- | ------------- | ----------------- |
+| NFV 相关策略管理 | **TS 28.311** | 为管理和生命周期行为提供策略支持  |
+| 意图驱动管理     | **TS 28.312** | 将更高层的目标转换为管理动作    |
+| 管理数据分析 MDA | **TS 28.104** | 对管理数据进行分析，为决策提供依据 |
+
+这些能力分别扩展了策略、目标表达和分析的管理手段。([portal.3gpp.org][18])
+
+下面三个表达处在不同层次：
+
+* “把实例数量设置为 6”：具体部署目标。
+* “负载达到条件后允许扩容”：管理策略。
+* “持续满足园区业务的性能目标”：更高层意图。
+
+系统可以根据性能数据判断是否需要动作，再把动作转换为部署或配置操作。但**使用声明式部署文件，并不自动意味着已经实现意图驱动管理**。
+
+---
+
+## 5. 第四阶段：Rel-18 的容器化 VNF 管理
+
+### 5.1 TR 28.834 研究了什么？
+
+**TR 28.834：Study on management of cloud-native VNF**，围绕云原生 VNF 的管理展开研究。
+
+其用例包括：
+
+| 研究方向  | 具体管理问题            |
+| ----- | ----------------- |
+| 配置    | 如何使用通用 OAM 能力支持配置 |
+| 流量    | 如何处理云原生 VNF 的流量管理 |
+| 性能    | 如何采集和管理性能         |
+| 故障    | VNFC 故障如何被发现和处理   |
+| 创建    | 如何创建网络功能          |
+| 扩缩容   | 如何调整软件部署容量        |
+| 恢复    | 如何进行 healing      |
+| 升级    | 软件包及软件更新如何处理      |
+| 软件包管理 | 部署所需制品如何纳入管理      |
+
+该报告把容器化环境中的管理问题放入既有电信管理和 MANO 协同框架中研究。([iTecSpec][19])
+
+### 5.2 Rel-18 实际落标了什么？
+
+这是历史上一个必须准确表述的节点。
+
+**TR 21.918 §28.3** 对 Rel-18 的 MCVNF 工作作了总结，明确指出增强落在：
+
+* **TS 28.526**；
+* **TS 28.531**；
+* **TS 28.533**。
+
+主要变化是：
+
+1. 增强云原生 VNF 管理与 ETSI NFV-MANO 的交互描述，支持容器化 VNF 生命周期。
+2. 澄清 TS 28.531 在使用 ETSI NFV 时的 VNF 管理范围。
+3. 删除 TS 28.526 中一些缺乏 ETSI 对应支持、无法执行的软件包管理流程。([itecspec.com][4])
+
+因此，Rel-18 的准确定位是：
+
+> **在既有 SA5 管理架构和 MANO 协同路径上增强容器化 VNF 管理。**
+
+这里也体现出阅读标准时的一条实用规则：历史版本曾经出现的流程，后来可能被改成 `Void`。不能把旧目录里的所有操作都当作当前可执行流程。
+
+### 5.3 容器化与云原生设计的关系
+
+TR 28.869 后续讨论了微服务、弹性、韧性、可观测性、不可变基础设施和声明式 API 等云原生原则。它们会影响管理方式，但不能据此认定所有 3GPP NF 都必须采用同一种微服务结构，或都必须无状态。([iTecSpec][20])
+
+对于有业务状态的网络功能，扩容、恢复和升级还需要处理状态一致性与业务连续性。这是理解电信云管理时的重要工程问题。
+
+---
+
+## 6. 第五阶段：从 VNF 管理扩展到 NF Deployment 管理
+
+### 6.1 为什么提出 NF Deployment？
+
+随着软件拆分和云编排技术发展，“一个 NF 对应一个整体部署单元”的假设越来越难以覆盖所有实现。
+
+例如，某个 NF 的不同软件部分可能分别升级和扩容；某些软件部署也可能被多个功能复用。管理系统因此需要分别处理：
+
+* **NF 的电信功能与管理生命周期**；
+* **实现 NF 的软件部署生命周期**。
+
+TR 28.869 §6.4 明确建议，在创建、修改和删除流程中支持 NFV-MANO 及非 ETSI NFV-MANO，并支持 NF Deployment 生命周期与 NF 生命周期的解耦。([itecspec.com][2])
+
+“解耦”的实际含义是：
+
+* 软件组件调整后，上层电信功能对象未必需要删除重建；
+* 管理系统必须知道哪些部署变化影响哪个 NF；
+* 软件部署完成与电信功能就绪，需要分别判断。
+
+### 6.2 TR 28.869 的范围与版本归属
+
+**TR 28.869：Study on cloud aspects of management and orchestration** 的研究主要分为：
+
+1. VNF 通用 OAM 功能；
+2. 使用业界方案管理 NF Deployment；
+3. 不同云部署场景。
+
+第二部分进一步涉及架构、数据流、创建、修改、终止、扩缩容和可观测性。([iTecSpec][21])
+
+官方记录显示：
+
+* 2023 年 12 月按 Rel-19 创建；
+* 2025 年 12 月进入变更控制；
+* 正式 **V20.0.0** 于 2026 年 1 月上传，归入 Rel-20。([portal.3gpp.org][22])
+
+所以，最准确的描述是：**Rel-19 启动的云管理研究，形成了 Rel-20 正式研究报告，并推动 Rel-20 规范工作。**
+
+### 6.3 Release 20 已批准的规范变化
+
+针对 **NF Deployment LCM**，官方批准记录可以核实以下内容：
+
+| 规范            | 已批准 CR     | 变化内容               | 进入的版本      |
+| ------------- | ---------- | ------------------ | ---------- |
+| TS **28.531** | 0266 Rev.1 | NF Deployment 定义   | **20.1.0** |
+| TS **28.531** | 0267 Rev.1 | 相关用例               | **20.1.0** |
+| TS **28.531** | 0268 Rev.1 | 相关要求               | **20.1.0** |
+| TS **28.531** | 0269 Rev.1 | NF Deployment 流程   | **20.1.0** |
+| TS **28.531** | 0270 Rev.1 | NSSI 生命周期流程更新      | **20.1.0** |
+| TS **28.533** | 0180 Rev.1 | NF Deployment 架构变化 | **20.0.0** |
+
+这些变更经 SA#112 批准；TS 28.531 官方版本记录也列出了 V20.1.0。([portal.3gpp.org][23])
+
+这说明两个方向已经有正式规范依据：
+
+* 管理架构支持更广泛的部署编排协同；
+* Provisioning 增加 NF Deployment 相关定义、要求和流程。
+
+但不能由此推导“所有云原生管理问题均已标准化”，尤其不能把研究报告中的每个候选方案都当作已落标功能。
+
+---
+
+## 7. 完整操作教程：部署并管理一个边缘 UPF
+
+以下用“为某园区部署一个 UPF”贯穿完整生命周期。园区、容量和副本数都是教学场景，不是规范规定值。
+
+先讲可从 TS 正文核对的经典 MANO 路径，再解释 NF Deployment 如何扩展它。
+
+### 7.1 第一步：把业务需求转换为两类要求
+
+假设需要一个服务园区业务的 UPF。管理系统需要区分：
+
+| 要求类别   | 示例                      | 主要作用         |
+| ------ | ----------------------- | ------------ |
+| 电信功能要求 | 服务哪个网络、承担什么功能、需要哪些连接与配置 | 确定 NF 及其管理模型 |
+| 软件部署要求 | 使用哪个部署制品、需要什么部署能力和容量    | 交给编排管理系统执行   |
+
+TR 28.869 Annex D 的创建示例，就是由 NF Provisioning 服务生产者根据 NF 相关要求推导部署要求，再与编排系统交互。([iTecSpec][24])
+
+这一转换不能简单理解为“把网元配置原封不动传给云平台”。两侧使用的模型和职责不同。
+
+### 7.2 第二步：创建 UPF——经典 MANO 路径
+
+TS 28.531 §7.10 中的基础创建流程可以整理为七步：
+
+1. **收到创建请求。**
+   NF 管理服务消费者要求创建相应的管理对象，并提供 NF 相关要求。
+
+2. **判断是否涉及虚拟化部署。**
+   如涉及虚拟化部分，服务生产者推导 VNF 相关要求。
+
+3. **准备软件包。**
+   必要时进行软件包 onboarding 或相关处理。
+
+4. **调用生命周期管理。**
+   经 MANO 进行 VNF 实例化，或通过 Network Service 更新等相应路径实现。
+
+5. **创建 NF 管理对象。**
+   在管理模型中创建相应的 ManagedFunction 类对象实例。
+
+6. **配置电信功能。**
+   设置相关 NRM 信息。
+
+7. **返回创建结果。**
+   向消费者返回管理对象的 DN。([iTecSpec][25])
+
+这七步分别解决三个问题：
+
+* 软件有没有被部署；
+* NF 有没有进入电信管理模型；
+* NF 有没有完成所需配置。
+
+### 7.3 第三步：正确处理异步生命周期
+
+TS 28.526 §4.2.2.1 的 EM 发起实例化流程提供了一个明确例子：
+
+* EM 首先申请 VNF 标识；
+* VNFM 返回 `vnfInstanceId`；
+* EM 再发起实例化；
+* VNFM 返回生命周期操作标识；
+* 后续通知报告操作开始和执行结果。([itecspec.com][26])
+
+所以，实际实现必须区分：
+
+| 观察到的结果      | 能证明什么        |
+| ----------- | ------------ |
+| 获得 VNF 标识   | 创建了相应的实例信息标识 |
+| 获得操作响应      | 请求被接受或进入处理   |
+| 收到成功结果通知    | 相应生命周期动作完成   |
+| 应用配置及业务检查通过 | 电信功能达到预期运行条件 |
+
+**仅收到请求响应，不能直接认定 UPF 已经可以承载业务。**
+
+### 7.4 第四步：扩容——同时处理部署变化和模型同步
+
+假设业务增长，需要扩大 UPF 的处理能力。
+
+TS 28.531 §7.11 的基础流程从管理对象属性修改出发：判断是否需要扩缩容，如需要则与 MANO 交互，再进行相应配置和响应。([iTecSpec][27])
+
+进一步看 **TS 28.511 §4.3**，它解决了一个容易被忽略的问题：扩容后如何同步 MOI。
+
+* NM 发起的路径：接收 NFVO 的扩容通知，确定需要更新的 MOI，再请求 EM 更新。
+* EM 发起的路径：接收 VNFM 通知，更新 MOI，并通知 NM。([iTecSpec][28])
+
+一个完整的扩容管理过程应当能够回答：
+
+1. 为什么扩容，是业务容量不足还是其他原因？
+2. 哪个管理实体有权发起扩容？
+3. 部署动作是否完成？
+4. 哪些组件、资源和管理对象发生变化？
+5. 电信侧配置是否需要调整？
+6. 扩容后业务性能是否达到目标？
+
+其中，“4 个组件扩为 6 个”只是部署结果；管理侧还需要知道它们属于哪个 UPF，以及相应状态和关系如何变化。
+
+### 7.5 第五步：故障恢复——关联资源故障与电信故障
+
+假设 UPF 的一个运行组件出现异常。
+
+TS 28.516 §4.2.1 给出的流程是：
+
+* VNFM 向 EM 报告与虚拟资源相关的 VNF 告警；
+* VNF 应用向 EM 报告应用告警；
+* EM 利用实例和组件标识进行关联；
+* 再向 NM 报告关联后的告警信息。([itecspec.com][29])
+
+由此可以理解：一个资源故障可能引发多条应用告警。管理系统应尽量识别共同原因，而不是把每条告警都当作独立故障。
+
+**TS 28.516 §4.4** 又提供了 EM 请求 VNFM 执行 VNF healing 的流程，包含恢复请求、操作标识和执行通知。([iTecSpec][30])
+
+实际恢复过程应分别检查：
+
+* 承载资源是否恢复；
+* 软件组件是否恢复；
+* 电信应用是否正常；
+* 业务性能是否恢复。
+
+这些检查是根据不同管理层职责整理的工程步骤。具体恢复算法、会话处理和资源替换方式，不能仅由上述 SA5 流程推导为统一实现。
+
+### 7.6 第六步：软件升级——同步应用状态和部署信息
+
+**TS 28.526 §4.2.8** 给出了一种有明确适用条件的升级流程：
+
+* 应用软件属于 VNF Package；
+* 升级不要求改变底层虚拟资源或内部 VNFC 拓扑、组成；
+* NM 请求 EM 更新软件；
+* 确认业务正常后，再更新 NFVO 中对应的 VNF 实例信息。([itecspec.com][31])
+
+这条流程的教学意义是：
+
+> 升级不仅要让软件变化生效，还要让管理系统记录的软件包和实例信息与实际运行状态一致。
+
+容器环境可以采用不同的软件发布机制。但滚动更新、蓝绿发布或其他发布方式，属于具体实现选择，不能全部说成 SA5 统一规定的流程。
+
+### 7.7 第七步：退网——同时结束部署与管理对象
+
+TS 28.531 §7.12 的经典删除流程是：
+
+1. 服务消费者指定管理对象 DN，提出删除请求；
+2. 如涉及虚拟化部分，执行相应 VNF 终止、标识删除或 NS 更新；
+3. 删除 NF 的管理对象；
+4. 返回删除响应。([itecspec.com][32])
+
+因此，完整退网需要同时处理软件部署与管理对象。
+
+还要根据实际业务判断是否存在共享关系：例如，部署是否仍被其他功能或服务使用。共享对象的处理需要结合具体模型、流程和实现，不能直接按“删除一个 NF 就删除所有相关资源”执行。
+
+### 7.8 整个生命周期中，应保留哪些关联信息？
+
+下表是根据上述流程整理的实现建议，不是新增标准字段表。
+
+| 关联信息             | 为什么需要         |
+| ---------------- | ------------- |
+| 管理对象 DN 与部署实例的关联 | 知道哪个部署实现哪个 NF |
+| VNF 实例与组件的关联     | 识别扩缩容和故障影响    |
+| 生命周期操作标识与管理请求的关联 | 跟踪异步动作        |
+| 软件制品版本与实际运行版本的关联 | 校验升级结果        |
+| NF 与切片、子网、服务的关联  | 评估上层业务影响      |
+| 资源告警与应用告警的关联     | 支持根因分析        |
+| 配置变化与性能变化的关联     | 判断动作是否改善业务    |
+
+这些关联构成了“部署管理”和“电信管理”之间的实际连接。
+
+---
+
+## 8. NF Deployment 路径与 Kubernetes 示例
+
+### 8.1 新路径改变了什么？
+
+从教程角度看，新路径保留了上层 NF 管理需求，但将下层交互拓展到更广泛的编排管理系统。
+
+| 环节   | 管理侧的职责           |
+| ---- | ---------------- |
+| 创建   | 根据 NF 要求形成部署要求   |
+| 修改   | 确定功能变化对软件部署的影响   |
+| 终止   | 协调 NF 和相关部署的结束   |
+| 状态同步 | 把编排结果关联回 NF 管理对象 |
+
+TR 28.869 将 MANO 与非 MANO 都纳入研究；Rel-20 的正式 CR 则已经将相关架构和流程增强推进到 TS。具体下层接口实现仍需遵循其适用的编排体系，不能认为 SA5 为所有平台定义了一种统一云 API。
+
+### 8.2 声明式描述符：表达目标，再由系统实现
+
+TR 28.869 §5.2.3.3.2 讨论了通过声明式描述符进行创建：管理侧表达需要实现的部署目标，由编排系统决定执行过程。
+
+该章节同时指出，ETSI NFV 的 VNFD 已具有声明式描述作用；非 MANO 方案中的统一描述符并未在该研究中直接标准化。([itecspec.com][33])
+
+因此：
+
+* 声明式管理不专属于 Kubernetes；
+* 使用 REST 接口不自动意味着声明式管理；
+* 声明目标与表达业务意图处在不同抽象层次。
+
+例如，“目标容量提升到某等级”是目标描述；“先创建什么组件、怎样分配资源、如何完成切换”是具体执行过程。
+
+### 8.3 TR 28.869 Annex A 的 Kubernetes CRD 示例
+
+该附录提供的是**一种可能实现**：
+
+1. 集群中已有相应 NF Operator。
+2. NF Provisioning 服务生产者形成部署要求。
+3. 通过 Kubernetes 客户端创建自定义资源。
+4. Operator 观察到资源变化。
+5. Operator 将要求转换成 Kubernetes 原生对象。
+6. 控制平面在节点上实现部署。
+7. 更新实际状态。
+8. 管理侧查询状态，后续修改继续沿这一机制执行。([itecspec.com][34])
+
+这能帮助理解控制循环：
+
+> 管理侧提交目标；Operator 与平台负责使实际部署趋近目标；管理侧再取得状态，并与电信功能状态关联。
+
+但该附录没有给出一个所有厂商必须采用的、由 3GPP 统一规定的 NF Deployment CRD schema。
+
+还应注意两个同名缩写：
+
+* 3GPP 的 **CR**：Change Request，标准变更请求；
+* Kubernetes 的 **CR**：Custom Resource，自定义资源。
+
+---
+
+## 9. 性能、数据流和可观测性：云管理不能只看 CPU
+
+### 9.1 性能管理需要两个视角
+
+早期 NFV 性能管理由 TS 28.520—28.523 提供要求、流程及实现层规范。进入 5G 后，还需要结合网络功能测量与业务 KPI。
+
+| 视角    | 教学示例          | 主要用途         |
+| ----- | ------------- | ------------ |
+| 运行资源  | CPU、内存、网络资源负载 | 判断承载资源情况     |
+| 电信功能  | 会话、流量、功能处理情况  | 判断 NF 运行情况   |
+| 服务或切片 | 端到端性能与业务目标    | 判断整体服务是否满足要求 |
+
+与这一体系相关的重要标准包括：
+
+* **TS 28.550**：性能保障；
+* **TS 28.552**：5G 性能测量；
+* **TS 28.554**：端到端 KPI；
+* **TS 28.532**：通用性能管理及数据报告服务；
+* **TS 28.111**：故障管理。
+
+其中 TS 28.111 是 Rel-18 起形成的故障管理规范；早期 5G 故障监督规范是 TS 28.545。两者的历史位置应分别说明。([TEC TS- 28.533 V1.3.0][35])
+
+实际分析时，低 CPU 利用率并不能证明业务正常；高 CPU 利用率也不能单独证明必须扩容。应结合电信功能和服务层数据判断。
+
+### 9.2 数据流报告已经有基础能力
+
+TS 28.532 §12.5 提供 Streaming Data Reporting 服务，包括：
+
+* 建立和结束连接；
+* 增加和删除数据流；
+* 报告数据；
+* 查询连接和数据流信息。([iTecSpec][36])
+
+TR 28.869 对数据流方案的结论则区分为：
+
+* 基于消息总线的方案：建议在 Rel-20 的更广泛 SBMA 工作中继续研究；
+* 使用已有 TS 28.532 数据流机制的方案：已有能力支持，不需要因该方案另行开展规范工作。([iTecSpec][37])
+
+因此，仅凭这份研究报告，不能认定 SA5 强制使用某一种消息总线产品。
+
+### 9.3 可观测性的十项研究要求
+
+TR 28.869 §5.2.7.2 列出的候选要求可以归纳如下：
+
+| 编号后缀 | 候选能力                   |
+| ---- | ---------------------- |
+| 01   | 提供 Metrics             |
+| 02   | 提供 Logs                |
+| 03   | 提供 Traces              |
+| 04   | 支持标准数据格式               |
+| 05   | 支持标准采集和报告机制            |
+| 06   | 关联不同 NF 的遥测数据          |
+| 07   | 支持运营商配置过滤              |
+| 08   | 安全地向可信 PLMN 域外暴露过滤后的数据 |
+| 09   | 安全地接收域外数据              |
+| 10   | 将 NF 数据与域外数据关联         |
+
+这些是 **PREQ-OBS_CNF-Cloud-OAM-01 至 10**，属于该 TR 的候选要求。([iTecSpec][38])
+
+该报告 §6.6 建议在 6G 中继续研究相应解决方案。因此，不能据此宣称它已经统一规定了 OpenTelemetry 接口、日志格式或分布式追踪实现。([itecspec.com][39])
+
+对前面的 UPF 示例而言，可观测性要回答的是：
+
+> 是哪次配置或扩容动作，引起哪个部署变化，进而影响哪个 NF 和哪项业务？
+
+这比单独收集几组指标更进一步。
+
+---
+
+## 10. SA5 与 ETSI NFV 的边界：标准如何组合使用？
+
+### 10.1 容器化并未消除 ETSI NFV
+
+TR 28.869 Annex G 总结了 ETSI NFV 对容器化部署的支持，涉及以下规范：
+
+| ETSI 标准                        | 相关内容                            |
+| ------------------------------ | ------------------------------- |
+| **GS NFV-IFA 011**             | VNF Descriptor                  |
+| **GS NFV-IFA 014**             | Network Service Descriptor      |
+| **GS NFV-IFA 007 / 008 / 013** | MANO 相关生命周期和管理接口                |
+| **GS NFV-IFA 036**             | 容器基础设施服务管理相关能力                  |
+| **GS NFV-IFA 040**             | 容器工作负载管理相关能力                    |
+| **GS NFV-SOL 018**             | 与容器基础设施服务接口实现、Kubernetes 对象映射相关 |
+| **GS NFV-SOL 020**             | 容器基础设施服务管理接口实现                  |
+| **GS NFV-SOL 001 / 004**       | 描述符与软件包                         |
+| **GS NFV-SOL 002 / 003 / 005** | 相关 REST 接口解决方案                  |
+
+该附录中的 **ETSI NFV Release 4** 是 ETSI 自身的版本体系，不是 3GPP Release 4。([itecspec.com][40])
+
+实际组合方式是：
+
+* SA5 描述电信管理要求、对象和协同过程；
+* ETSI NFV 描述相应部署编排模型和接口；
+* 具体平台完成软件与资源操作。
+
+### 10.2 通用 OAM 功能研究的结论是什么？
+
+TR 28.869 研究了配置、策略、升级和流量管理中的 VNF 通用 OAM 功能。
+
+但 §6.5 的结论很明确：
+
+* 非应用层能力及接口由 ETSI 相关规范处理；
+* 应用层配置、策略和升级由 3GPP 管理系统及对应 MnS 承担；
+* 对使用 VNF 通用 OAM 功能，没有形成推荐意见；
+* 该报告中的流量管理用例存在范围不清的问题，不能作为 SA5 已完成的统一方案。([iTecSpec][41])
+
+这说明，**研究过一种机制，不等于最终采纳了它。**
+
+### 10.3 云部署位置也不能只凭用例标题认定已解决
+
+TR 28.869 §5.3.1 研究了云原生 NF 的部署位置问题，但相应潜在解决方案章节没有给出可用方案。
+
+因此，该报告可以支持“SA5 识别了部署位置问题”，不能支持“SA5 已提供完整多云放置算法”这一结论。([iTecSpec][42])
+
+---
+
+## 11. 6G 阶段：当前明确是什么状态？
+
+### 11.1 TR 32.801-01 仍然是研究草案
+
+官方记录显示：
+
+* 标准号：**TR 32.801-01**；
+* 名称：Study on 6G Management and Orchestration；
+* 初始 Release：20；
+* 状态：**Draft**；
+* 当前记录中具有下载链接和上传日期的版本为 **0.4.0，2026 年 9 月 4 日上传**。([portal.3gpp.org][43])
+
+因此，它可以用于了解研究方向，不能作为已经完成的 6G 管理接口规范来使用。
+
+### 11.2 云管理研究主要向哪些方面扩展？
+
+**一是更高层的生命周期。**
+
+草案讨论 NF Deployment 对网络子网、网络切片子网生命周期的影响，并注明要结合 5G-Advanced 的规范进展继续研究。这里还需结合前面的正式 CR 看：Rel-20 的 TS 28.531 已经批准 NSSI LCM 流程更新，所以不能机械照抄较早草案，声称 NSSI 在 5G 阶段完全没有被涉及。([iTecSpec][44])
+
+**二是云环境中的管理韧性。**
+
+草案场景讨论了网络功能工作负载、外部编排调度、备份能力和流量恢复之间的协同。它关注的是管理系统如何配合恢复电信服务，而不仅是单个运行组件重启。([iTecSpec][45])
+
+**三是跨域因果关联和端到端可观测性。**
+
+TR 32.801-01 §6.1.8.1.1 描述了把管理动作的因果上下文传播到不同域，并附着于日志、指标、追踪和事件的研究场景。这样才能关联“配置动作—扩容请求—云平台失败—业务影响”。([iTecSpec][46])
+
+这些方向体现出：云管理的关注点正在从单次操作，扩展到跨层生命周期和跨域运行结果。
+
+---
+
+# 三、总：把整条发展路线和标准使用方式收拢
+
+## 1. 五次演进，分别解决了什么？
+
+| 演进                      | 核心变化                        | 代表标准                              |
+| ----------------------- | --------------------------- | --------------------------------- |
+| 从物理网元到虚拟化网元             | 电信管理开始与软件、虚拟资源生命周期协同        | TR 32.842、TS 28.500               |
+| 从单项协同到系统规范              | 配置、故障、性能和生命周期分别形成规范族        | TS 28.510—28.528 的四组规范            |
+| 从分层管理到服务化管理             | 管理能力以 MnS 提供和消费，配合 NRM 表达对象 | TS 28.530—28.533、TS 28.541        |
+| 从传统 VNF 到容器化 VNF        | 增强 MANO 协同及容器化生命周期管理        | TR 28.834；TS 28.526、28.531、28.533 |
+| 从 VNF 协同到 NF Deployment | 支持更广泛编排系统，区分 NF 与软件部署生命周期   | TR 28.869；Rel-20 TS 28.531、28.533 |
+
+这条历史的关键不是简单地“把 VM 换成容器”，而是管理抽象逐步完善：**电信功能、管理对象、软件部署、运行资源之间的关系，需要被明确表达和持续同步。**
+
+## 2. 实际解决问题时，应如何使用这些标准？
+
+| 实际问题          | 应组合使用的核心标准                               | 本教程已经解释的处理逻辑                 |
+| ------------- | ---------------------------------------- | ---------------------------- |
+| 电信网管如何接入 MANO | TS 28.500、28.533                         | 明确角色、参考点和服务关系                |
+| 创建、修改、删除 NF   | TS 28.531、28.532、28.541                  | 管理请求、部署协同、模型创建与配置            |
+| VNF 实例化与异步状态  | TS 28.525、28.526                         | 标识创建、操作请求、结果通知               |
+| 扩缩容后如何保持信息一致  | TS 28.511、28.526、28.531                  | 部署变化后同步管理对象                  |
+| 如何关联资源与应用故障   | TS 28.516、28.111                         | 利用实例、组件和资源映射关联告警             |
+| 如何判断业务是否正常    | TS 28.550、28.552、28.554                  | 结合资源、NF 与服务层数据               |
+| 如何管理边缘计算      | TS 28.538 及相关 NRM                        | 将部署位置、生命周期和运行保障联系起来          |
+| 如何支持非 MANO 编排 | Rel-20 TS 28.531、28.533；TR 28.869 作为研究背景 | 通过部署管理协同实现 NF Deployment LCM |
+| 如何理解后续可观测性方向  | TR 28.869、TR 32.801-01                   | 区分候选要求、研究场景与正式接口             |
+
+## 3. 最后需要掌握的判断方法
+
+阅读或讨论 SA5 云管理时，应依次判断：
+
+1. **管理对象是什么？**
+   是 NF、软件部署、VNF 组件、资源，还是切片与子网？
+
+2. **动作属于哪一层？**
+   是应用配置、部署生命周期，还是基础设施操作？
+
+3. **谁执行，谁维护结果？**
+   管理服务生产者、EM、VNFM、NFVO 或其他编排系统各承担什么职责？
+
+4. **状态如何回到电信管理模型？**
+   请求响应、操作结果通知、对象更新和业务验证是否闭合？
+
+5. **材料处于什么状态？**
+   TS 中的正式要求、TR 中的研究方案、已批准 CR，以及草案中的候选需求，必须分别对待。
+
+**SA5 云管理的完整理解，就是把“电信功能要求—部署动作—运行状态—业务结果”连起来。** 截至本次核验，NFV 协同、5G 服务化管理和容器化 VNF 管理已有规范基础，NF Deployment 已进入 Rel-20 正式规范；跨域可观测性和更高层云管理能力则仍在继续发展。
+
+[1]: https://itecspec.com/3gpp/28.313/s/6.4.1.3.3?utm_source=chatgpt.com "https://itecspec.com/3gpp/28.313/s/6.4.1.3.3"
+[2]: https://itecspec.com/3gpp/28.869/s/6.4?utm_source=chatgpt.com "https://itecspec.com/3gpp/28.869/s/6.4"
+[3]: https://itecspec.com/3gpp/rel-13/32.842?utm_source=chatgpt.com "rel 13 TR 32.842 — 3rd Generation Partnership Project; Technical Specification Group Services and System Aspects; Telecommunication management; Study on network management of virtualized networks (Release 13); 3rd Generation Partnership Project; Technical Specification Group Services and System Aspects; Telecommunication management; Study on network management of virtualized networks (Release 13)"
+[4]: https://itecspec.com/3gpp/21.918/s/28.3?utm_source=chatgpt.com "https://itecspec.com/3gpp/21.918/s/28.3"
+[5]: https://itecspec.com/3gpp/28.869/s/4.2.2?utm_source=chatgpt.com "TS 28.869 Section 4.2.2 — Terminology alignment with ETSI NFV"
+[6]: https://itecspec.com/3gpp/28.500/s/4.2.2?utm_source=chatgpt.com "TS 28.500 Section 4.2.2 — The relationship between NE and VNF"
+[7]: https://itecspec.com/3gpp/28.869/s/4.2.1?utm_source=chatgpt.com "TS 28.869 Section 4.2.1 — Terminology and concepts used in the present document"
+[8]: https://itecspec.com/3gpp/32.101?utm_source=chatgpt.com "TS 32.101 — 3rd Generation Partnership Project; Technical Specification Group Services and System Aspects; Telecommunication management; Principles and high level requirements"
+[9]: https://itecspec.com/3gpp/28.500/s/6.1.1?utm_source=chatgpt.com "https://itecspec.com/3gpp/28.500/s/6.1.1"
+[10]: https://portal.3gpp.org/Specifications.aspx?WiUid=680035&q=1&utm_source=chatgpt.com "3GPP Portal > Specifications"
+[11]: https://itecspec.com/3gpp/28.800?utm_source=chatgpt.com "TR 28.800 — 3rd Generation Partnership Project; Technical Specification Group Services and System Aspects; Telecommunication management; Study on management and orchestration architecture of next generation networks and services; 3rd Generation Partnership Project; Technical Specification Group Services and System Aspects; Telecommunication management; Study on management and orchestration architecture of next generation networks and services"
+[12]: https://itecspec.com/3gpp/28.533?utm_source=chatgpt.com "TS 28.533 — 3rd Generation Partnership Project; Technical Specification Group Services and System Aspects; Management and orchestration; Architecture framework"
+[13]: https://itecspec.com/3gpp/28.533/s/4.1?utm_source=chatgpt.com "https://itecspec.com/3gpp/28.533/s/4.1"
+[14]: https://itecspec.com/3gpp/28.533/s/4.2.2?utm_source=chatgpt.com "https://itecspec.com/3gpp/28.533/s/4.2.2"
+[15]: https://itecspec.com/3gpp/28.541/s/5.3.3.1?utm_source=chatgpt.com "TS 28.541 Section 5.3.3.1 — Definition"
+[16]: https://itecspec.com/3gpp/28.533/s/5.2?utm_source=chatgpt.com "https://itecspec.com/3gpp/28.533/s/5.2"
+[17]: https://itecspec.com/3gpp/28.803?utm_source=chatgpt.com "https://itecspec.com/3gpp/28.803"
+[18]: https://portal.3gpp.org/desktopmodules/Specifications/SpecificationDetails.aspx?specificationId=3551&utm_source=chatgpt.com "https://portal.3gpp.org/desktopmodules/Specifications/SpecificationDetails.aspx?specificationId=3551"
+[19]: https://itecspec.com/3gpp/28.834?utm_source=chatgpt.com "TR 28.834 — 3rd Generation Partnership Project; Technical Specification Group Services and System Aspects; Study on management of cloud-native Virtualized Network Functions (VNF)"
+[20]: https://itecspec.com/3gpp/28.869/s/4.4.4?utm_source=chatgpt.com "TS 28.869 Section 4.4.4 — Relevance of cloud-native design principles to 3GPP OAM"
+[21]: https://itecspec.com/3gpp/28.869?utm_source=chatgpt.com "TR 28.869 — 3rd Generation Partnership Project; Technical Specification Group Services and System Aspects; Study on cloud aspects of management and orchestration"
+[22]: https://portal.3gpp.org/desktopmodules/Specifications/SpecificationDetails.aspx?specificationId=4273&utm_source=chatgpt.com "https://portal.3gpp.org/desktopmodules/Specifications/SpecificationDetails.aspx?specificationId=4273"
+[23]: https://portal.3gpp.org/ChangeRequests.aspx?q=1&workitem=1100016&utm_source=chatgpt.com "3GPP Portal > ChangeRequests"
+[24]: https://itecspec.com/3gpp/28.869/s/annex-d?utm_source=chatgpt.com "TS 28.869 Section annex-d — Example scenario using interactions with orchestration and management entity for the creation of NF Deployment instances"
+[25]: https://itecspec.com/3gpp/28.531/s/7.10?utm_source=chatgpt.com "TS 28.531 Section 7.10 — Procedure of NF instance creation"
+[26]: https://itecspec.com/3gpp/28.526/s/4.2.2.1?utm_source=chatgpt.com "https://itecspec.com/3gpp/28.526/s/4.2.2.1"
+[27]: https://itecspec.com/3gpp/28.531/s/7.11?utm_source=chatgpt.com "TS 28.531 Section 7.11 — Procedure of NF instance modification"
+[28]: https://itecspec.com/3gpp/28.511/s/4.3?utm_source=chatgpt.com "TS 28.511 Section 4.3 — Procedure of updating MOI(s) after a VNF is scaled"
+[29]: https://itecspec.com/3gpp/28.516/s/4.2.1?utm_source=chatgpt.com "https://itecspec.com/3gpp/28.516/s/4.2.1"
+[30]: https://itecspec.com/3gpp/28.516/s/4.4?utm_source=chatgpt.com "TS 28.516 Section 4.4 — VNF Healing with operation request to VNFM by EM through Ve-Vnfm-em"
+[31]: https://itecspec.com/3gpp/28.526/s/4.2.8?utm_source=chatgpt.com "https://itecspec.com/3gpp/28.526/s/4.2.8"
+[32]: https://itecspec.com/3gpp/28.531/s/7.12?utm_source=chatgpt.com "https://itecspec.com/3gpp/28.531/s/7.12"
+[33]: https://itecspec.com/3gpp/28.869/s/5.2.3.3.2?utm_source=chatgpt.com "https://itecspec.com/3gpp/28.869/s/5.2.3.3.2"
+[34]: https://itecspec.com/3gpp/28.869/s/annex-a?utm_source=chatgpt.com "https://itecspec.com/3gpp/28.869/s/annex-a"
+[35]: https://tec.gov.in/pdf/3gpp/TSDSI_Doc_531/rel17/TS-28.533%20V1.3.0.pdf?utm_source=chatgpt.com "२८.५३३ संस्करण१.३.०"
+[36]: https://itecspec.com/3gpp/28.532/s/12.5?utm_source=chatgpt.com "TS 28.532 Section 12.5 — Streaming data reporting service"
+[37]: https://itecspec.com/3gpp/28.869/s/6.2?utm_source=chatgpt.com "TS 28.869 Section 6.2 — Data streaming for cloud-native NF deployments"
+[38]: https://itecspec.com/3gpp/28.869/s/5.2.7.2?utm_source=chatgpt.com "TS 28.869 Section 5.2.7.2 — Potential requirements"
+[39]: https://itecspec.com/3gpp/28.869/s/6.6?utm_source=chatgpt.com "https://itecspec.com/3gpp/28.869/s/6.6"
+[40]: https://itecspec.com/3gpp/28.869/s/annex-g?utm_source=chatgpt.com "https://itecspec.com/3gpp/28.869/s/annex-g"
+[41]: https://itecspec.com/3gpp/28.869/s/6.5?utm_source=chatgpt.com "TS 28.869 Section 6.5 — Use of VNF generic OAM functions"
+[42]: https://itecspec.com/3gpp/28.869/s/5.3.1.3?utm_source=chatgpt.com "TS 28.869 Section 5.3.1.3 — Potential solutions"
+[43]: https://portal.3gpp.org/desktopmodules/Specifications/SpecificationDetails.aspx?specificationId=5491&utm_source=chatgpt.com "https://portal.3gpp.org/desktopmodules/Specifications/SpecificationDetails.aspx?specificationId=5491"
+[44]: https://itecspec.com/3gpp/rel-20/32.801-01/s/7.5.1.2?utm_source=chatgpt.com "Rel-20 TS 32.801-01 Section 7.5.1.2 — Potential Requirements"
+[45]: https://itecspec.com/3gpp/rel-20/32.801-01/s/6.2.1.2.1?utm_source=chatgpt.com "Rel-20 TS 32.801-01 Section 6.2.1.2.1 — Description"
+[46]: https://itecspec.com/3gpp/rel-20/32.801-01/s/6.1.8.1.1?utm_source=chatgpt.com "Rel-20 TS 32.801-01 Section 6.1.8.1.1 — Description"

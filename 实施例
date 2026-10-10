@@ -1,0 +1,797 @@
+对，这个要求是必要的。技术交底书中的流程图编号和文字说明必须形成严格的一一对应关系，否则代理人在撰写权利要求或审查员对照附图时，容易出现某个动作没有文字依据，或者一段文字对应多个不明确动作的问题。
+
+下面按照上一版PUML中的编号逐项改写。每一个编号均单独描述，不再出现“Step 2a～2c”这种合并写法。
+
+---
+
+# 实施例一：基于两级目录的知识发现与直接获取
+
+本实施例以RAN域中的小区负荷预测知识为例。MnF_RAN1中部署有负荷预测Knowledge Function，并管理知识实例`KI-RAN-LOAD-001`。知识消费者需要获得区域A内目标小区未来30分钟的负荷预测结果。
+
+## Step 1a：知识生产者向RAN域目录发布实例级知识描述符投影
+
+- 动作对象：MnF_RAN1 → RAN域Catalogue MnF；
+- 调用操作：`publishDescriptor`；
+- 传递参数：`instanceDescriptorProjection`。
+
+MnF_RAN1获取知识实例`KI-RAN-LOAD-001`的完整知识描述符，并根据实例级投影规则提取用于知识发现的字段。
+
+所述实例级知识描述符投影可以包括知识实例标识、知识类型、作用对象、适用范围、输入说明、输出说明、知识生产者标识、Knowledge MnS端点、版本和有效期。
+
+知识内容、模型参数、训练数据和内部部署信息可以不包括在实例级投影中。MnF_RAN1通过Catalogue MnS将生成的实例级知识描述符投影发布至RAN域目录。
+
+## Step 1b：RAN域目录验证并注册知识实例投影
+
+- 动作对象：RAN域Catalogue MnF内部；
+- 输入：`instanceDescriptorProjection`；
+- 输出：域内知识实例目录记录。
+
+RAN域目录对接收到的投影进行完整性、格式和权限验证。验证通过后，根据`knowledgeInstanceId`判断该投影是新增知识实例还是已有实例的更新。
+
+对于新增实例，RAN域目录建立知识实例与知识生产者、Knowledge MnS访问端点之间的关联，并针对知识类型、作用对象、适用范围和有效期建立查询索引。
+
+该步骤仅在目录中注册知识描述和访问引用，不将实际负荷预测模型或预测结果复制到目录中。
+
+## Step 1c：RAN域目录返回实例级投影发布确认
+
+- 动作对象：RAN域Catalogue MnF → MnF_RAN1；
+- 输出：`Ack`。
+
+RAN域目录完成实例级投影注册后，向MnF_RAN1返回发布确认。确认信息可以包括目录记录标识、已接受的投影版本、记录生效时间、租约到期时间和处理结果。
+
+如果注册失败，确认消息中可以携带缺失字段、版本冲突或权限不足等失败原因。
+
+## Step 2：RAN域目录生成域级知识描述符投影
+
+- 动作对象：RAN域Catalogue MnF内部；
+- 输入：本域内一个或多个实例级知识描述符投影；
+- 输出：`domainDescriptorProjection`。
+
+RAN域目录对本域中同类或者相关知识实例进行聚合、抽象和脱敏，生成域级知识描述符投影。
+
+例如，当RAN域中存在多个分别覆盖不同小区的负荷预测知识实例时，可以将其聚合为“RAN域能够提供区域A内的小区负荷预测知识”。
+
+域级投影可以包括域标识、知识类别、支持的作用对象、范围摘要、本体摘要、域目录端点、投影版本和有效期。具体知识实例标识和知识生产者内部地址可以不包含在域级投影中。
+
+## Step 3a：RAN域目录向联邦目录发布域级投影
+
+- 动作对象：RAN域Catalogue MnF → 联邦Catalogue MnF；
+- 调用操作：`publishDescriptor`；
+- 传递参数：`domainDescriptorProjection`。
+
+RAN域目录作为Catalogue MnS消费者，调用联邦目录提供的目录发布操作，将域级知识能力投影发布至联邦目录。
+
+该发布使联邦目录能够获知RAN域可提供的知识类别和大致适用范围，但不要求联邦目录获知具体知识实例。
+
+## Step 3b：联邦目录注册域级知识能力投影
+
+- 动作对象：联邦Catalogue MnF内部；
+- 输入：`domainDescriptorProjection`；
+- 输出：联邦级知识域索引。
+
+联邦目录验证域级投影的来源、版本和字段格式，并按照知识类型、作用对象和适用范围建立联邦级索引。
+
+例如，可以建立如下索引关系：
+
+\[
+CellLoadPrediction+RegionA\rightarrow RAN\ Domain
+\]
+
+该索引用于后续确定目标知识可能位于哪个管理域。
+
+## Step 3c：联邦目录返回域级投影发布确认
+
+- 动作对象：联邦Catalogue MnF → RAN域Catalogue MnF；
+- 输出：`Ack`。
+
+联邦目录完成域级投影注册后，向RAN域目录返回确认。确认信息可以包括域级投影标识、当前版本、生效时间和处理结果。
+
+## Step 4a：知识消费者查询联邦目录
+
+- 动作对象：Knowledge Consumer → 联邦Catalogue MnF；
+- 调用操作：`queryCatalogue`；
+- 输入：知识类型、目标范围和任务约束。
+
+知识消费者构造第一查询请求。例如，请求中包括：
+
+- `knowledgeType=CellLoadPrediction`；
+- `subject=NRCellDU`；
+- `scope=RegionA`；
+- 预测时间范围；
+- 可选的时效性和权限要求。
+
+该查询的目的是从多个管理域中定位可能提供目标知识的候选域。
+
+## Step 4b：联邦目录匹配候选知识域
+
+- 动作对象：联邦Catalogue MnF内部；
+- 输入：第一查询条件；
+- 输出：候选域匹配结果。
+
+联邦目录将查询条件与各域发布的域级投影进行比较，判断知识类型是否相同或语义等价、目标范围是否重叠、投影是否有效以及消费者是否有权访问。
+
+本实施例中，联邦目录确定RAN域能够提供目标知识。
+
+## Step 4c：联邦目录返回候选域信息
+
+- 动作对象：联邦Catalogue MnF → Knowledge Consumer；
+- 输出：`CandidateDomain`。
+
+返回信息包括RAN域标识、RAN域目录端点、匹配的知识类别、范围摘要以及`queryContextId`。
+
+该步骤仅确定候选域，尚未确定由哪个知识实例以及哪个知识生产者提供知识。
+
+## Step 5a：知识消费者查询RAN域目录
+
+- 动作对象：Knowledge Consumer → RAN域Catalogue MnF；
+- 调用操作：`queryCatalogue`；
+- 输入：`queryContextId`和详细查询条件。
+
+知识消费者在第一查询结果的基础上，向RAN域目录发送更细粒度的查询条件，例如具体小区列表、预测时长、最低置信度、最大执行时延和输出格式。
+
+## Step 5b：RAN域目录匹配具体知识实例
+
+- 动作对象：RAN域Catalogue MnF内部；
+- 输入：详细查询条件；
+- 输出：目标知识实例匹配结果。
+
+RAN域目录在实例级投影中进行查询，排除已经过期、范围不匹配、输入输出不兼容或消费者无权使用的知识实例。
+
+本实施例中，RAN域目录确定`KI-RAN-LOAD-001`满足查询条件。
+
+## Step 5c：RAN域目录返回知识实例引用
+
+- 动作对象：RAN域Catalogue MnF → Knowledge Consumer；
+- 输出：`KnowledgeInstanceReference`。
+
+所述知识实例引用可以包括知识实例标识、知识生产者标识、Knowledge MnS端点、输入输出说明、版本、有效期和访问约束。
+
+域目录不返回知识内容或者预测结果，只返回后续创建Knowledge Job所需的信息。
+
+## Step 6a：知识消费者创建Knowledge Job
+
+- 动作对象：Knowledge Consumer → MnF_RAN1；
+- 调用服务：Knowledge MnS；
+- 输入：知识实例标识和任务参数。
+
+知识消费者根据知识实例引用直接访问MnF_RAN1，请求创建Knowledge Job。请求中可以包括目标小区集合、预测开始时间、预测时长、任务输入数据、输出格式、完成时限和回调地址。
+
+该请求不经过域目录或联邦目录转发。
+
+## Step 6b：知识生产者返回任务接受确认
+
+- 动作对象：MnF_RAN1 → Knowledge Consumer；
+- 输出：`Ack`。
+
+MnF_RAN1验证知识实例状态、任务参数和消费者权限。验证通过后创建任务上下文，并返回`jobId`、任务接受状态和预计完成时间。
+
+## Step 7a：知识生产者执行知识功能
+
+- 动作对象：MnF_RAN1内部；
+- 输入：Knowledge Job中的任务参数；
+- 输出：知识计算结果。
+
+MnF_RAN1调用负荷预测Knowledge Function，读取历史业务量、无线资源利用率、活动用户数和时间特征，计算目标小区未来30分钟的负荷。
+
+## Step 7b：知识生产者返回知识结果
+
+- 动作对象：MnF_RAN1 → Knowledge Consumer；
+- 输出：`KnowledgeResult`或者结果通知。
+
+知识结果可以包括任务标识、目标小区、预测负荷值、预测时间区间、置信度、知识实例版本和结果生成时间。
+
+---
+
+# 实施例二：RAN域与CN域知识的联合发现
+
+## Step 1a：知识消费者发起跨域知识查询
+
+- 动作对象：Knowledge Consumer → 联邦Catalogue MnF；
+- 输入：问题类型、目标范围、时间区间和所需知识类别。
+
+知识消费者针对“用户业务速率下降”问题发起查询，并声明需要无线性能知识和核心网用户面知识。请求中还可以携带目标小区、网络切片标识、PDU会话标识和异常发生时间。
+
+## Step 1b：联邦目录执行跨域能力匹配
+
+- 动作对象：联邦Catalogue MnF内部；
+- 输入：跨域查询条件；
+- 输出：候选域集合。
+
+联邦目录将查询条件与各域的域级知识投影进行匹配，确定RAN域可以提供无线异常知识，CN域可以提供UPF及会话异常知识。
+
+## Step 1c：联邦目录返回候选域集合
+
+- 动作对象：联邦Catalogue MnF → Knowledge Consumer；
+- 输出：RAN域端点、CN域端点和`crossDomainContextId`。
+
+所述跨域上下文标识用于表示后续两个域内查询属于同一个跨域分析任务。
+
+## Step 2a：知识消费者查询RAN域目录
+
+- 动作对象：Knowledge Consumer → RAN域Catalogue MnF；
+- 输入：跨域上下文标识和RAN域详细条件。
+
+详细条件可以包括目标小区、时间区间、无线异常类别和网络切片标识。
+
+## Step 2b：RAN域目录匹配无线异常知识实例
+
+- 动作对象：RAN域Catalogue MnF内部；
+- 输入：RAN域详细查询条件；
+- 输出：RAN候选知识实例。
+
+RAN域目录从无线干扰、PRB拥塞、覆盖异常等知识实例中选择能够覆盖目标对象和时间范围的实例。
+
+## Step 2c：RAN域目录返回无线知识实例引用
+
+- 动作对象：RAN域Catalogue MnF → Knowledge Consumer；
+- 输出：RAN侧`KnowledgeInstanceReference`。
+
+返回内容包括无线知识实例标识、知识生产者端点、所需输入、输出类型、版本和有效期。
+
+## Step 3a：知识消费者查询CN域目录
+
+- 动作对象：Knowledge Consumer → CN域Catalogue MnF；
+- 输入：跨域上下文标识和CN域详细条件。
+
+详细条件可以包括UPF标识、PDU会话标识、网络切片标识和异常时间区间。
+
+## Step 3b：CN域目录匹配用户面异常知识实例
+
+- 动作对象：CN域Catalogue MnF内部；
+- 输入：CN域详细查询条件；
+- 输出：CN候选知识实例。
+
+CN域目录从UPF负载分析、会话转发异常和用户面时延分析等实例中选择满足条件的实例。
+
+## Step 3c：CN域目录返回核心网知识实例引用
+
+- 动作对象：CN域Catalogue MnF → Knowledge Consumer；
+- 输出：CN侧`KnowledgeInstanceReference`。
+
+返回内容包括核心网知识实例标识、知识生产者端点、输入输出说明和版本信息。
+
+## Step 4a：知识消费者创建RAN知识任务
+
+- 动作对象：Knowledge Consumer → MnF_RAN2；
+- 输入：RAN知识实例标识和共享关联信息。
+
+共享关联信息可以包括时间区间、目标小区和网络切片标识，以便RAN结果能够与CN结果进行关联。
+
+## Step 4b：RAN知识生产者返回无线分析结果
+
+- 动作对象：MnF_RAN2 → Knowledge Consumer；
+- 输出：`RANKnowledgeResult`。
+
+结果可以包括无线资源利用率、干扰状态、覆盖状态、无线异常类别、置信度和时间戳。
+
+## Step 5a：知识消费者创建CN知识任务
+
+- 动作对象：Knowledge Consumer → MnF_CN1；
+- 输入：CN知识实例标识和共享关联信息。
+
+请求可以包括UPF、PDU会话、切片标识和目标时间区间。
+
+## Step 5b：CN知识生产者返回用户面分析结果
+
+- 动作对象：MnF_CN1 → Knowledge Consumer；
+- 输出：`CNKnowledgeResult`。
+
+结果可以包括UPF负载、端口拥塞状态、用户面时延、丢包情况、异常类别和置信度。
+
+## Step 6：知识消费者组合跨域知识结果
+
+- 动作对象：Knowledge Consumer内部；
+- 输入：RAN知识结果和CN知识结果；
+- 输出：跨域根因判断结果。
+
+知识消费者根据时间、空间、切片或会话标识对两个结果进行对齐。例如，当RAN侧状态正常而CN侧UPF发生拥塞时，将业务速率下降的根因确定为CN域用户面资源不足。
+
+---
+
+# 实施例三：知识实例更新、失效及目录一致性维护
+
+## Step 1a：知识生产者发布初始知识实例投影
+
+- 动作对象：Knowledge Producer → 域Catalogue MnF；
+- 输入：实例标识、版本V1、序列号N和租约周期。
+
+知识生产者在实例级投影中携带版本和租约信息，使域目录能够判断记录的新旧关系和生产者的可用状态。
+
+## Step 1b：域目录注册V1并启动租约计时器
+
+- 动作对象：域Catalogue MnF内部；
+- 输入：初始实例级投影；
+- 输出：V1版本目录记录和租约到期时间。
+
+域目录保存版本V1和序列号N，并根据租约周期启动对应计时器。
+
+## Step 1c：域目录返回初始发布确认
+
+- 动作对象：域Catalogue MnF → Knowledge Producer；
+- 输出：V1版本确认和租约到期时间。
+
+知识生产者据此确认域目录已经接受当前版本。
+
+## Step 2a：域目录发布初始域级投影
+
+- 动作对象：域Catalogue MnF → 联邦Catalogue MnF；
+- 输入：版本为P1的`domainProjection`。
+
+域目录根据当前有效知识实例生成域级知识能力投影。
+
+## Step 2b：联邦目录返回P1版本确认
+
+- 动作对象：联邦Catalogue MnF → 域Catalogue MnF；
+- 输出：`Ack(P1)`。
+
+该确认表示初始域级知识能力已经在联邦目录中生效。
+
+## Step 3a：知识生产者发送增量更新请求
+
+- 动作对象：Knowledge Producer → 域Catalogue MnF；
+- 输入：旧版本V1、新版本V2、序列号N+1和变化属性列表。
+
+增量请求只携带发生变化的属性及其新值，不要求重新传输全部描述信息。
+
+## Step 3b：域目录校验更新版本和序列号
+
+- 动作对象：域Catalogue MnF内部；
+- 输入：增量更新请求；
+- 输出：版本校验结果。
+
+域目录检查请求中的旧版本是否等于当前版本，并检查N+1是否大于已保存序列号，从而防止重复或乱序消息覆盖较新记录。
+
+## Step 3c：域目录向联邦目录发送域级投影更新
+
+- 执行条件：实例变化影响域级知识能力；
+- 动作对象：域Catalogue MnF → 联邦Catalogue MnF；
+- 输入：版本由P1更新至P2的域级投影。
+
+例如，当实例适用范围由区域A扩展至区域B时，需要更新联邦目录中的范围摘要。
+
+## Step 3d：联邦目录返回P2版本确认
+
+- 动作对象：联邦Catalogue MnF → 域Catalogue MnF；
+- 输出：`Ack(P2)`。
+
+该确认表示联邦目录已采用更新后的域级投影。
+
+## Step 3e：域目录仅更新域内记录
+
+- 执行条件：实例变化不影响域级投影；
+- 动作对象：域Catalogue MnF内部。
+
+例如，仅知识生产者内部地址或者域内运行参数发生变化时，不需要同步更新联邦目录。
+
+## Step 3f：域目录向知识生产者返回V2更新确认
+
+- 动作对象：域Catalogue MnF → Knowledge Producer；
+- 输出：`Ack(V2)`。
+
+该确认表示实例级描述符已经更新为V2。
+
+## Step 4a：域目录将超时实例标记为不可用或过期
+
+- 触发条件：租约到期且未收到刷新；
+- 动作对象：域Catalogue MnF内部。
+
+域目录可以先将实例标记为`suspectedUnavailable`，超过宽限期后再标记为`expired`。
+
+## Step 4b：域目录更新或撤销联邦域级投影
+
+- 动作对象：域Catalogue MnF → 联邦Catalogue MnF；
+- 输入：更新后的域级投影或撤销请求。
+
+如果失效实例是本域中提供该类知识的最后一个实例，则撤销对应域级能力；否则只更新范围或实例能力摘要。
+
+## Step 4c：联邦目录返回处理确认
+
+- 动作对象：联邦Catalogue MnF → 域Catalogue MnF；
+- 输出：`Ack`。
+
+确认消息表示联邦目录已完成更新或撤销。
+
+## Step 4d：知识消费者查询域目录
+
+- 动作对象：Knowledge Consumer → 域Catalogue MnF；
+- 输入：知识查询条件。
+
+该查询发生在实例租约已经超时之后。
+
+## Step 4e：域目录不返回失效实例或降低其优先级
+
+- 动作对象：域Catalogue MnF → Knowledge Consumer；
+- 输出：过滤后的查询结果。
+
+被标记为`expired`的实例不再返回；被标记为`suspectedUnavailable`的实例可以降低优先级并携带状态提示。
+
+## Step 5a：知识生产者发送实例撤销请求
+
+- 动作对象：Knowledge Producer → 域Catalogue MnF；
+- 输入：实例标识、最后版本、撤销原因和可选替代实例标识。
+
+该请求用于主动删除或者永久停用知识实例。
+
+## Step 5b：域目录记录撤销状态
+
+- 动作对象：域Catalogue MnF内部；
+- 输入：撤销请求；
+- 输出：撤销标志或墓碑记录。
+
+墓碑记录可以防止迟到的旧版本发布消息重新激活该实例。
+
+## Step 5c：域目录更新或撤销联邦域级投影
+
+- 动作对象：域Catalogue MnF → 联邦Catalogue MnF；
+- 输入：更新请求或者域级投影撤销请求。
+
+域目录根据剩余有效实例重新计算本域知识能力。
+
+## Step 5d：联邦目录返回撤销处理确认
+
+- 动作对象：联邦Catalogue MnF → 域Catalogue MnF；
+- 输出：`Ack`。
+
+该确认表示联邦级记录已经完成相应变更。
+
+## Step 5e：域目录向知识生产者返回撤销确认
+
+- 动作对象：域Catalogue MnF → Knowledge Producer；
+- 输出：撤销操作结果。
+
+知识生产者收到确认后，可以停止刷新该实例的租约并释放相关目录维护资源。
+
+---
+
+# 实施例四：跨运营商场景下的受控知识发现
+
+## Step 1a：知识消费者携带身份和授权信息查询联邦目录
+
+- 动作对象：Knowledge Consumer → 联邦Catalogue MnF；
+- 输入：查询条件、消费者身份、角色和授权信息。
+
+查询请求同时表明消费者希望发现的知识类别及其所属安全域。
+
+## Step 1b：联邦目录执行联邦级身份验证和访问控制
+
+- 动作对象：联邦Catalogue MnF内部；
+- 输入：身份、角色、凭证和查询条件；
+- 输出：联邦级授权结果。
+
+联邦目录判断消费者是否能够发现目标域以及目标知识类别。
+
+## Step 1c：联邦目录返回候选域和临时查询令牌
+
+- 执行条件：联邦级验证通过；
+- 动作对象：联邦Catalogue MnF → Knowledge Consumer；
+- 输出：域目录端点、临时令牌、许可类别和令牌有效期。
+
+临时令牌与消费者身份、目标域和许可知识类别绑定。
+
+## Step 1d：联邦目录返回访问拒绝
+
+- 执行条件：联邦级验证失败；
+- 动作对象：联邦Catalogue MnF → Knowledge Consumer；
+- 输出：`AccessDenied`。
+
+拒绝结果可以携带身份验证失败、凭证过期或者知识类别无权限等原因。
+
+## Step 2a：知识消费者携带临时令牌查询域目录
+
+- 动作对象：Knowledge Consumer → 域Catalogue MnF；
+- 输入：临时查询令牌和详细查询条件。
+
+消费者不能利用该令牌查询令牌许可范围以外的其他知识类别。
+
+## Step 2b：域目录验证令牌和域级访问权限
+
+- 动作对象：域Catalogue MnF内部；
+- 输入：临时令牌、消费者身份和查询条件；
+- 输出：域级授权结果。
+
+域目录验证令牌签发方、有效期、绑定身份及许可范围。
+
+## Step 2c：域目录生成受控实例描述
+
+- 执行条件：域级验证通过；
+- 动作对象：域Catalogue MnF内部；
+- 输出：经过访问控制和脱敏的实例级描述。
+
+域目录可以隐藏生产者内部地址，将具体对象列表概括为区域范围，或者移除涉及内部拓扑的信息。
+
+## Step 2d：域目录返回受控知识实例引用
+
+- 动作对象：域Catalogue MnF → Knowledge Consumer；
+- 输出：实例标识、受控描述和一次性任务凭证。
+
+一次性任务凭证用于后续访问知识生产者，不需要向消费者公开永久访问凭证。
+
+## Step 2e：域目录返回访问拒绝
+
+- 执行条件：域级验证失败；
+- 动作对象：域Catalogue MnF → Knowledge Consumer；
+- 输出：`AccessDenied`。
+
+拒绝原因可以包括令牌失效、身份不一致或者详细查询超出许可范围。
+
+## Step 3a：知识消费者携带任务凭证创建Knowledge Job
+
+- 动作对象：Knowledge Consumer → Knowledge Producer；
+- 输入：知识实例标识、一次性任务凭证和任务输入。
+
+该凭证仅允许消费者针对指定知识实例创建任务。
+
+## Step 3b：知识生产者验证一次性任务凭证
+
+- 动作对象：Knowledge Producer内部；
+- 输入：一次性任务凭证；
+- 输出：任务级授权结果。
+
+生产者验证凭证签发方、消费者身份、知识实例标识、使用次数和有效期。
+
+## Step 3c：知识生产者返回任务接受确认
+
+- 执行条件：任务凭证有效；
+- 动作对象：Knowledge Producer → Knowledge Consumer；
+- 输出：`jobId`和任务接受状态。
+
+## Step 3d：知识生产者执行知识功能
+
+- 动作对象：Knowledge Producer内部；
+- 输入：经过授权的任务参数；
+- 输出：知识处理结果。
+
+## Step 3e：知识生产者返回受保护的知识结果
+
+- 动作对象：Knowledge Producer → Knowledge Consumer；
+- 输出：`ProtectedKnowledgeResult`。
+
+知识结果可以按照消费者权限执行字段过滤、脱敏或者加密。
+
+## Step 3f：知识生产者拒绝创建任务
+
+- 执行条件：任务凭证无效；
+- 动作对象：Knowledge Producer → Knowledge Consumer；
+- 输出：`JobAccessDenied`。
+
+---
+
+# 实施例五：基于知识质量和任务约束的多实例选择
+
+## Step 1a：第一知识生产者发布知识实例及质量描述
+
+- 动作对象：MnF_RAN1 → RAN域Catalogue MnF；
+- 输入：知识实例KI-1和质量描述Q1。
+
+质量描述可以包括知识更新时间、历史准确率、平均执行时延、覆盖范围和可用性。
+
+## Step 1b：域目录确认第一知识实例发布成功
+
+- 动作对象：RAN域Catalogue MnF → MnF_RAN1；
+- 输出：KI-1的发布确认。
+
+## Step 2a：第二知识生产者发布知识实例及质量描述
+
+- 动作对象：MnF_RAN2 → RAN域Catalogue MnF；
+- 输入：知识实例KI-2和质量描述Q2。
+
+KI-2可以与KI-1具有相同知识类型，但具有不同覆盖范围、执行时延或者历史准确率。
+
+## Step 2b：域目录确认第二知识实例发布成功
+
+- 动作对象：RAN域Catalogue MnF → MnF_RAN2；
+- 输出：KI-2的发布确认。
+
+## Step 3a：消费者提交带任务约束的知识查询
+
+- 动作对象：Knowledge Consumer → RAN域Catalogue MnF；
+- 输入：目标范围、最大时延、最低置信度、输出格式和版本要求。
+
+查询条件包括必须满足的硬约束和用于排序的偏好条件。
+
+## Step 3b：域目录根据硬约束过滤候选实例
+
+- 动作对象：RAN域Catalogue MnF内部；
+- 输入：KI-1、KI-2及任务约束；
+- 输出：满足硬约束的候选集合。
+
+域目录排除过期、范围不匹配、格式不兼容、时延超限或无权访问的实例。
+
+## Step 3c：域目录计算候选实例选择值
+
+- 动作对象：RAN域Catalogue MnF内部；
+- 输入：候选实例的匹配度、新鲜度、质量、可用性和代价；
+- 输出：各候选实例的`Score`。
+
+选择值可以按照以下方式计算：
+
+\[
+Score_i=w_1M_i+w_2F_i+w_3Q_i+w_4A_i-w_5C_i
+\]
+
+其中，各权重可以根据任务类型或者消费者偏好确定。
+
+## Step 3d：域目录返回排序后的知识实例引用
+
+- 动作对象：RAN域Catalogue MnF → Knowledge Consumer；
+- 输出：实例引用、选择值和选择原因。
+
+本实施例中，KI-1的综合选择值高于KI-2，因此排列在第一位。
+
+## Step 4a：消费者调用选中的KI-1
+
+- 动作对象：Knowledge Consumer → MnF_RAN1；
+- 输入：KI-1标识和任务输入。
+
+消费者根据排序结果选择第一知识生产者，并创建Knowledge Job。
+
+## Step 4b：第一知识生产者返回任务接受确认
+
+- 动作对象：MnF_RAN1 → Knowledge Consumer；
+- 输出：`jobId`和任务状态。
+
+## Step 4c：第一知识生产者执行知识任务
+
+- 动作对象：MnF_RAN1内部；
+- 输入：Knowledge Job参数；
+- 输出：知识计算结果。
+
+## Step 4d：第一知识生产者返回知识结果
+
+- 动作对象：MnF_RAN1 → Knowledge Consumer；
+- 输出：实际执行时延、结果和置信度。
+
+实际运行指标可用于验证目录中记录的质量描述。
+
+## Step 5a：消费者向域目录报告使用反馈
+
+- 动作对象：Knowledge Consumer → RAN域Catalogue MnF；
+- 输入：任务成功状态、实际时延、结果可用性和验证信息。
+
+## Step 5b：域目录更新实例的历史质量属性
+
+- 动作对象：RAN域Catalogue MnF内部；
+- 输入：消费者反馈；
+- 输出：更新后的KI-1质量描述。
+
+域目录可以更新历史成功率、平均执行时延和结果可用性。
+
+## Step 5c：域目录返回反馈接收确认
+
+- 动作对象：RAN域Catalogue MnF → Knowledge Consumer；
+- 输出：`Ack`。
+
+---
+
+# 实施例六：目录故障情况下的降级发现与恢复
+
+## Step 1a：知识消费者向联邦目录发送查询
+
+- 动作对象：Knowledge Consumer → 联邦Catalogue MnF；
+- 输入：知识查询条件。
+
+消费者首先按照正常目录发现流程查询联邦目录。
+
+## Step 1b：联邦目录无响应或不可用
+
+- 动作对象：联邦Catalogue MnF → Knowledge Consumer；
+- 结果：连接失败、查询超时或目录不可用。
+
+该结果触发后续降级发现流程。
+
+## Step 2：知识消费者进入降级发现模式
+
+- 动作对象：Knowledge Consumer内部；
+- 触发条件：正常目录查询失败。
+
+消费者启动本地缓存查询，但不立即将缓存记录视为当前有效记录。
+
+## Step 3a：知识消费者读取本地目录缓存
+
+- 动作对象：Knowledge Consumer → Local Catalogue Cache；
+- 输入：查询条件和当前时间。
+
+缓存中保存消费者此前成功获得并验证过的域级或实例级投影。
+
+## Step 3b：缓存组件检查记录有效性
+
+- 动作对象：Local Catalogue Cache内部；
+- 输入：缓存记录、当前时间和查询范围；
+- 输出：缓存匹配结果。
+
+缓存组件检查有效期、版本、适用范围和撤销状态。
+
+## Step 3c：缓存组件返回有效实例引用
+
+- 执行条件：存在未过期的匹配缓存；
+- 动作对象：Local Catalogue Cache → Knowledge Consumer；
+- 输出：实例标识、生产者端点、版本和到期时间。
+
+## Step 3d：缓存组件返回缓存未命中
+
+- 执行条件：不存在有效缓存；
+- 动作对象：Local Catalogue Cache → Knowledge Consumer；
+- 输出：`CacheMiss`。
+
+## Step 3e：消费者停止创建知识任务或触发备用机制
+
+- 执行条件：收到`CacheMiss`；
+- 动作对象：Knowledge Consumer内部。
+
+备用机制可以包括查询其他联邦目录副本，或者将当前知识任务标记为暂不可执行。
+
+## Step 4a：消费者基于缓存引用创建Knowledge Job
+
+- 动作对象：Knowledge Consumer → Knowledge Producer；
+- 输入：实例标识、缓存版本、`cacheBasedIndicator`和任务输入。
+
+`cacheBasedIndicator`表明本次任务基于缓存目录信息创建。
+
+## Step 4b：知识生产者执行最终有效性验证
+
+- 动作对象：Knowledge Producer内部；
+- 输入：缓存版本、实例标识和消费者信息；
+- 输出：最终验证结果。
+
+生产者检查实例是否存在、版本是否兼容以及消费者权限是否仍然有效。
+
+## Step 4c：知识生产者返回任务接受确认
+
+- 执行条件：缓存引用仍然有效；
+- 动作对象：Knowledge Producer → Knowledge Consumer；
+- 输出：`jobId`。
+
+## Step 4d：知识生产者执行知识任务
+
+- 动作对象：Knowledge Producer内部；
+- 输入：任务参数；
+- 输出：知识结果。
+
+## Step 4e：知识生产者返回知识结果
+
+- 动作对象：Knowledge Producer → Knowledge Consumer；
+- 输出：`KnowledgeResult`。
+
+## Step 4f：知识生产者拒绝失效的缓存引用
+
+- 执行条件：缓存实例已失效或版本不兼容；
+- 动作对象：Knowledge Producer → Knowledge Consumer；
+- 输出：拒绝结果、最新版本或替代实例标识。
+
+## Step 5a：目录恢复后消费者重新查询联邦目录
+
+- 动作对象：Knowledge Consumer → 联邦Catalogue MnF；
+- 输入：原查询条件和缓存投影版本。
+
+携带缓存版本可以使联邦目录判断消费者是否需要获得更新后的投影。
+
+## Step 5b：联邦目录返回当前域级引用
+
+- 动作对象：联邦Catalogue MnF → Knowledge Consumer；
+- 输出：当前域级投影版本和域目录端点。
+
+## Step 6a：消费者查询域目录中的当前实例状态
+
+- 动作对象：Knowledge Consumer → 域Catalogue MnF；
+- 输入：知识实例标识和缓存版本。
+
+## Step 6b：域目录返回当前实例引用
+
+- 动作对象：域Catalogue MnF → Knowledge Consumer；
+- 输出：当前版本、当前生产者端点和实例状态。
+
+消费者比较当前版本与缓存版本，判断缓存是否需要更新。
+
+## Step 7a：消费者更新或者删除缓存记录
+
+- 动作对象：Knowledge Consumer → Local Catalogue Cache；
+- 输入：当前知识实例引用。
+
+如果实例已经升级，则更新缓存；如果实例已经撤销或者过期，则删除缓存记录。
+
+## Step 7b：缓存组件返回更新确认
+
+- 动作对象：Local Catalogue Cache → Knowledge Consumer；
+- 输出：`Ack`。
+
+至此，目录恢复后的缓存一致性校验和修复完成。

@@ -1,0 +1,342 @@
+下面给出《一种基于受限知识的跨管理功能知识生成方法》的两个完整实施例，按照技术交底书的写法组织。
+
+两个实施例采用相同的基本发明构思，但解决不同情况下的知识生成问题：
+
+* 实施例一：受限源知识的派生能力协商与知识生成。 Consumer事先不知道Producer能够提供哪些派生知识，通过协商确定可生成的知识范围。
+* 实施例二：受限源知识只能部分满足生成需求时的知识生成调整。 Consumer提出的知识需求超出Producer允许提供的范围，双方通过能力差异反馈调整生成要求。
+
+两个实施例均只涉及Knowledge MnS Consumer和Knowledge MnS Producer两个逻辑角色，不引入新的MnF类型，不规定知识生成的内部算法。相关请求和响应可基于已有MnS操作能力承载。
+
+以下字段均为拟议的交互信息元素，不表示3GPP现行规范已经定义这些字段。
+
+一、实施例一：基于受限无线拥塞知识生成可共享的诊断知识
+
+1.1 应用场景
+
+假设存在两个管理功能。
+
+RAN管理功能A：Knowledge MnS Producer
+
+A维护无线拥塞诊断知识K1。
+
+K1包括无线拥塞判断规则、具体指标阈值、无线拥塞与业务吞吐量之间的诊断关系等知识内容。
+
+其中，具体判断阈值及部分内部诊断规则受到共享限制，不允许向其他管理功能直接提供。
+
+CN管理功能B：Knowledge MnS Consumer
+
+B维护用于识别UPF转发异常的诊断知识K3。
+
+在生成或完善K3时，B需要利用无线侧拥塞与业务吞吐量之间的诊断关系，以辅助区分UPF异常与无线侧因素造成的业务吞吐量下降。
+
+但是，B没有权限获取完整K1。
+
+因此，B希望A基于K1生成一条可以向B提供的派生知识K2。
+
+K2需要满足以下要求：
+
+1. 能够描述无线拥塞与业务吞吐量下降之间的诊断关系。
+2. 包含该诊断关系的适用条件。
+3. 不包含K1中禁止共享的内部判断规则及具体阈值。
+4. 能够用于B后续生成或完善UPF异常诊断知识K3。
+
+需要说明，K2是可重复使用的诊断知识，而不是某一次网络故障的诊断结果。
+
+1.2 要解决的具体问题
+
+B虽然知道A维护无线拥塞诊断知识K1，但不知道A能够基于K1向其提供哪些派生知识。
+
+如果B直接请求完整无线拥塞诊断规则，A可能因为共享限制而拒绝。
+
+如果B仅请求一般性的无线拥塞知识，又可能无法满足其生成UPF异常诊断知识的需求。
+
+因此，需要通过交互，使B在不获取完整K1的情况下，确定A能够提供的派生知识能力，并基于该能力提出有效的知识生成请求。
+
+1.3 交互流程图
+
+@startuml
+title 实施例一：受限无线拥塞知识的派生能力协商与生成
+autonumber 1
+participant "CN管理功能B\nKnowledge MnS Consumer" as B
+participant "RAN管理功能A\nKnowledge MnS Producer" as A
+B -> A: S101 请求知识派生能力\nsourceKnowledgeReference=K1\nrequestedKnowledgeCapability=无线拥塞影响诊断\nintendedUsageScope=UPF异常诊断知识生成\nrequestedKnowledgeForm=诊断关系知识
+A --> B: S102 返回允许的派生能力\nsupportedDerivationCapability=无线拥塞与吞吐量关联诊断\npermittedKnowledgeForm=诊断关系\npermittedUsageScope=UPF异常辅助诊断\nderivationConstraintReference=DC-001
+B -> A: S103 请求生成派生知识K2\nsourceKnowledgeReference=K1\ntargetKnowledgeRequirement=无线拥塞影响诊断关系\nderivationConstraintReference=DC-001\ntargetKnowledgeUsageScope=UPF异常辅助诊断
+A --> B: S104 返回知识生成结果\ngeneratedKnowledgeReference=K2\nfulfilledKnowledgeCapability=无线拥塞影响诊断\nderivationConstraintSatisfaction=SATISFIED\neffectiveUsageScope=UPF异常辅助诊断
+@enduml
+
+1.4 具体实施步骤
+
+S101：CN管理功能B发送知识派生能力请求
+
+CN管理功能B在生成UPF异常诊断知识K3的过程中，确定需要利用RAN域维护的无线拥塞诊断知识K1。
+
+由于B无法获取K1的完整内容，因此B不直接请求K1，而是向RAN管理功能A发送知识派生能力请求。
+
+该请求包含以下信息：
+
+参数	示例值	作用
+sourceKnowledgeReference	K1	标识希望利用的源知识
+requestedKnowledgeCapability	CongestionImpactDiagnosis	表示希望获得无线拥塞影响诊断能力
+intendedUsageScope	UPFAbnormalityDiagnosis	表示知识用于UPF异常诊断
+requestedKnowledgeForm	DiagnosticRelationship	表示希望生成诊断关系知识
+
+通过上述信息，B向A表达其需要的知识能力及使用目的，而不要求A提供K1的完整内容。
+
+S102：RAN管理功能A返回允许的派生知识能力
+
+A接收到知识派生能力请求后，根据K1的共享约束以及B提出的目标知识能力和使用范围，确定能够向B提供的派生知识能力。
+
+在本实施例中，A确定可以提供无线拥塞与业务吞吐量下降之间的诊断关系，但不允许提供K1中的具体拥塞判断阈值及内部规则。
+
+A向B返回知识派生能力响应，包括：
+
+参数	示例值	作用
+supportedDerivationCapability	CongestionThroughputRelationship	允许提供的派生知识能力
+permittedKnowledgeForm	DiagnosticRelationship	允许提供的知识形式
+permittedUsageScope	UPFAbnormalityDiagnosis	允许使用的范围
+derivationConstraintReference	DC-001	标识本次派生约束
+
+其中，derivationConstraintReference用于关联本次派生能力协商结果与后续知识生成请求。
+
+A不需要向B披露具体受限阈值，也不需要说明内部知识生成方法。
+
+S103：CN管理功能B根据协商结果请求生成知识K2
+
+B接收到A返回的派生能力信息后，确定该能力可以满足其生成UPF异常诊断知识K3所需的部分无线侧知识需求。
+
+因此，B向A发送知识生成请求，要求A基于K1生成无线拥塞与业务吞吐量下降之间的诊断关系知识K2。
+
+请求包含：
+
+参数	示例值
+sourceKnowledgeReference	K1
+targetKnowledgeRequirement	CongestionThroughputRelationship
+derivationConstraintReference	DC-001
+targetKnowledgeUsageScope	UPFAbnormalityDiagnosis
+
+其中，B携带S102中获得的derivationConstraintReference，使A能够将当前知识生成请求与此前协商的派生约束关联。
+
+S104：RAN管理功能A返回派生知识K2及其能力信息
+
+A根据S103中的知识生成要求，基于K1生成派生知识K2。
+
+在本实施例中，K2包含无线拥塞与业务吞吐量下降之间的诊断关系及其适用条件，但不包含K1中禁止向B共享的内部判断阈值和完整诊断规则。
+
+A向B返回知识生成响应，包括：
+
+参数	示例值
+generatedKnowledgeReference	K2
+fulfilledKnowledgeCapability	CongestionThroughputRelationship
+derivationConstraintReference	DC-001
+derivationConstraintSatisfaction	SATISFIED
+effectiveUsageScope	UPFAbnormalityDiagnosis
+
+其中，derivationConstraintSatisfaction表示A声明生成结果满足本次协商的派生约束。该字段本身不构成对知识内容绝对无泄露的证明。
+
+B获得K2后，可以在允许的使用范围内，将K2用于后续UPF异常诊断知识K3的生成或完善。
+
+实施例一的技术效果： Consumer能够在不获取完整受限源知识的情况下，先确定可提供的派生知识能力，再根据协商结果请求生成知识，从而减少超出共享范围的无效知识生成请求，并明确生成知识的使用范围。
+
+⸻
+
+二、实施例二：目标知识能力无法完全满足时的派生知识生成调整
+
+实施例一中，Producer能够提供的派生知识能力满足Consumer的需求。
+
+但实际情况可能更复杂：
+
+Consumer希望获得的知识能力，可能只有一部分能够在源知识共享约束下提供。
+
+如果Producer只能返回生成失败，Consumer就无法知道哪些要求可以满足、哪些要求不能满足。
+
+因此，实施例二进一步设计部分能力满足情况下的交互流程。
+
+2.1 应用场景
+
+假设存在两个管理功能。
+
+RAN管理功能A：Knowledge MnS Producer
+
+维护无线拥塞诊断知识K1。
+
+K1包含：
+
+* 无线拥塞判断规则；
+* 具体判断阈值；
+* 无线拥塞与业务吞吐量下降之间的诊断关系；
+* 相关诊断关系的适用条件。
+
+其中，具体阈值及部分判断规则不允许向CN管理功能B共享。
+
+CN管理功能B：Knowledge MnS Consumer
+
+B正在生成用于区分UPF异常与无线侧拥塞影响的知识K3。
+
+为了提高K3的诊断能力，B希望从A获得两类知识能力：
+
+能力C1： 判断无线拥塞与业务吞吐量下降之间是否存在相关关系。
+
+能力C2： 根据具体无线指标阈值，确定无线拥塞是否为业务吞吐量下降的主要原因。
+
+但是，A只能提供C1，不能提供C2。
+
+原因是C2要求提供的知识内容涉及K1中受限的内部判断规则。
+
+因此，B最初提出的知识生成要求无法被完整满足。
+
+2.2 要解决的具体问题
+
+当Consumer请求的目标知识包含多个知识能力要求，而Producer仅允许提供其中部分能力时，如果Producer仅返回生成失败，Consumer无法确定哪些知识能力仍然可以获得。
+
+如果Producer直接生成部分知识而不说明能力差异，Consumer又可能错误地认为生成结果满足全部需求。
+
+因此，需要通过MnS交互向Consumer明确反馈允许提供的知识能力与原始目标知识要求之间的差异，使Consumer能够据此调整生成请求，并获得满足调整后要求的派生知识。
+
+2.3 交互流程图
+
+@startuml
+title 实施例二：部分知识能力满足情况下的派生知识生成调整
+autonumber 1
+participant "CN管理功能B\nKnowledge MnS Consumer" as B
+participant "RAN管理功能A\nKnowledge MnS Producer" as A
+B -> A: S201 请求知识派生能力\nsourceKnowledgeReference=K1\nrequestedKnowledgeCapability={C1,C2}\nintendedUsageScope=UPF异常诊断
+A --> B: S202 返回部分支持的派生能力\nsupportedDerivationCapability={C1}\nunsupportedKnowledgeCapability={C2}\nderivationConstraintReference=DC-002\ncapabilitySatisfaction=PARTIALLY_SUPPORTED
+B -> A: S203 请求生成调整后的知识K2\ntargetKnowledgeRequirement={C1}\nderivationConstraintReference=DC-002\noriginalRequirementReference=REQ-001
+A --> B: S204 返回派生知识K2\ngeneratedKnowledgeReference=K2\nfulfilledKnowledgeCapability={C1}\nunfulfilledKnowledgeCapability={C2}\nderivationConstraintSatisfaction=SATISFIED\noriginalRequirementReference=REQ-001
+@enduml
+
+2.4 具体实施步骤
+
+S201：CN管理功能B发送包含多个知识能力要求的派生能力请求
+
+B在生成UPF异常诊断知识K3时，需要获得无线侧的辅助诊断知识。
+
+B希望生成的知识同时具备C1和C2两项能力。
+
+其中：
+
+* C1用于描述无线拥塞与业务吞吐量下降之间的相关关系。
+* C2用于提供进一步判断无线拥塞是否为主要故障原因的知识能力。
+
+因此，B向A发送知识派生能力请求。
+
+请求包括：
+
+参数	示例值	含义
+sourceKnowledgeReference	K1	受限源知识引用
+requestedKnowledgeCapability	{C1, C2}	请求的知识能力集合
+intendedUsageScope	UPFAbnormalityDiagnosis	目标使用范围
+knowledgeRequirementReference	REQ-001	原始知识需求标识
+
+通过knowledgeRequirementReference，B可以在后续交互中关联本次原始知识需求。
+
+S202：RAN管理功能A返回部分可支持的派生知识能力
+
+A接收到S201中的请求后，确定可以提供C1，但不能提供C2。
+
+A向B返回：
+
+参数	示例值	含义
+supportedDerivationCapability	{C1}	允许提供的知识能力
+unsupportedKnowledgeCapability	{C2}	无法提供的知识能力
+capabilitySatisfaction	PARTIALLY_SUPPORTED	表示仅部分满足
+derivationConstraintReference	DC-002	派生约束引用
+knowledgeRequirementReference	REQ-001	对应原始知识需求
+
+通过该响应，B可以明确区分：
+
+* A能够提供哪些知识能力；
+* A不能提供哪些知识能力；
+* 当前允许生成的知识范围。
+
+需要注意，A不必披露C2不能提供的具体受限规则，也不必说明内部权限判断过程。
+
+S203：CN管理功能B调整知识生成要求
+
+B接收到S202中的部分能力满足信息后，确定C1仍然可以用于辅助生成UPF异常诊断知识K3。
+
+因此，B决定调整原始知识需求，不再要求A提供C2。
+
+B向A发送知识生成请求，要求生成具备C1能力的知识K2。
+
+请求包括：
+
+参数	示例值
+sourceKnowledgeReference	K1
+targetKnowledgeRequirement	{C1}
+derivationConstraintReference	DC-002
+originalRequirementReference	REQ-001
+targetKnowledgeUsageScope	UPFAbnormalityDiagnosis
+
+其中：
+
+derivationConstraintReference用于关联S202返回的派生约束。
+
+originalRequirementReference用于表明本次调整后的知识生成请求来源于S201中的原始知识需求。
+
+这样，后续生成结果可以同时关联调整后的生成要求与最初的知识需求。
+
+S204：RAN管理功能A返回调整后的派生知识及能力满足结果
+
+A根据S203中的知识生成要求，基于K1生成具备C1能力的派生知识K2。
+
+K2能够提供无线拥塞与业务吞吐量下降之间的相关关系知识，但不提供C2所要求的具体阈值及完整判断规则。
+
+A向B返回：
+
+参数	示例值
+generatedKnowledgeReference	K2
+fulfilledKnowledgeCapability	{C1}
+unfulfilledKnowledgeCapability	{C2}
+derivationConstraintReference	DC-002
+derivationConstraintSatisfaction	SATISFIED
+originalRequirementReference	REQ-001
+effectiveUsageScope	UPFAbnormalityDiagnosis
+
+其中，unfulfilledKnowledgeCapability={C2}表示相对于原始需求REQ-001，C2仍未得到满足；并不意味着A未完成S203中已经调整为仅包含C1的生成请求。
+
+B接收到K2后，可以明确知道：
+
+1. K2满足调整后的知识生成要求。
+2. K2符合本次约定的派生约束。
+3. K2未满足原始需求中的C2能力。
+4. K2可以在指定使用范围内用于后续知识生成。
+
+因此，B不会将K2误认为能够同时提供C1和C2两项能力。
+
+实施例二的技术效果： 当原始知识需求无法被完整满足时，Producer能够向Consumer明确反馈可支持与不可支持的知识能力，使Consumer根据反馈调整知识生成要求，并通过需求引用保持调整前后请求及生成结果之间的关联，避免将部分满足的知识误用于需要完整能力的管理任务。
+
+⸻
+
+三、两个实施例的区别与联系
+
+比较维度	实施例一	实施例二
+主要场景	Consumer不了解受限知识的可派生能力	Consumer请求的能力只有部分能够提供
+主要技术问题	如何确定允许生成的知识范围	如何处理目标知识能力与允许派生能力不一致
+第一阶段返回信息	可提供的派生能力及约束	可提供能力、不可提供能力及约束
+第二阶段请求	根据允许的派生能力请求生成知识	根据部分满足反馈调整生成要求
+第三阶段结果	返回知识及实际能力	返回知识、实际能力及原始需求的未满足部分
+重点参数	derivationConstraintReference	supportedDerivationCapability、unsupportedKnowledgeCapability、originalRequirementReference
+技术效果	减少超出共享范围的无效请求	支持部分满足情况下的需求调整，避免错误使用知识
+
+四、建议在技术交底书中如何组织
+
+我建议将实施例一作为基本实施例，实施例二作为扩展实施例。
+
+两者共同支撑的发明构思是：
+
+知识管理服务消费者向知识管理服务生产者请求基于受限源知识的派生能力，生产者返回允许的派生知识能力及约束信息，消费者根据所述信息确定或调整目标知识生成要求，并通过携带派生约束引用的知识生成请求获取派生知识，生产者返回生成知识及其能力满足情况。
+
+相应地：
+
+* 主权重点：派生能力请求、允许派生能力响应、关联派生约束的知识生成请求，以及关联该约束的生成结果。
+* 从权重点一：允许的知识形式与使用范围。
+* 从权重点二：部分支持的知识能力反馈。
+* 从权重点三：根据能力差异调整知识生成要求。
+* 从权重点四：原始需求与调整后需求的关联。
+* 从权重点五：生成结果的派生约束满足情况及能力满足情况。
+
+还需要注意一个专利撰写风险： 这两个实施例目前本质上是同一协商机制的正常情况和部分满足情况，而不是两个完全独立的发明点。这样安排适合支撑一篇专利，但不宜把它们包装成两项彼此独立的创新。
+
+另外，示例中“UPF异常诊断知识”的生成需求只是为了说明跨MnF知识依赖，不应在权利要求中限定RAN、CN或UPF。独立权利要求应保持Knowledge MnS Consumer和Knowledge MnS Producer两个逻辑角色，以覆盖OSS参与及其他符合条件的部署方式。

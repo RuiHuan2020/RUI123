@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>星上 MEC、DNAI 与 UPF 选择说明</title>
+<style>
+:root{--ink:#172033;--muted:#5c6880;--blue:#2457d6;--line:#dce4f0;--wash:#f4f7fc;--teal:#087e8b;--gold:#9a6412}
+*{box-sizing:border-box}body{margin:0;background:#edf2f8;color:var(--ink);font:16px/1.75 "Segoe UI","Microsoft YaHei",sans-serif}
+.wrap{max-width:1040px;margin:auto;padding:36px 22px 64px}.hero{background:linear-gradient(130deg,#142849,#2358a6);color:white;border-radius:22px;padding:42px 44px;box-shadow:0 14px 36px #17315c26}
+.eyebrow{font-size:13px;letter-spacing:.12em;text-transform:uppercase;color:#c6d8ff}.hero h1{font-size:clamp(28px,4vw,42px);line-height:1.25;margin:12px 0}.hero p{color:#e3ecff;max-width:780px;margin:0}.hero a{color:#fff}
+main{display:grid;grid-template-columns:220px 1fr;gap:28px;margin-top:28px}.toc{align-self:start;position:sticky;top:18px;background:white;border:1px solid var(--line);border-radius:16px;padding:18px}.toc b{display:block;margin:0 0 8px}.toc a{display:block;text-decoration:none;color:var(--muted);padding:5px 0;font-size:14px}.toc a:hover{color:var(--blue)}
+article{min-width:0}.card{background:#fff;border:1px solid var(--line);border-radius:18px;padding:26px 30px;margin-bottom:20px;box-shadow:0 5px 18px #1b31520a}.card h2{font-size:23px;line-height:1.35;margin:0 0 16px}.card h3{font-size:18px;margin:22px 0 8px}.lead{font-size:17px;color:#35425b}.note{padding:14px 17px;background:#eef4ff;border-left:4px solid var(--blue);border-radius:8px;margin:16px 0}.warn{background:#fff7e8;border-color:#e2a335}.good{background:#ecf8f5;border-color:#37a18a}
+table{width:100%;border-collapse:collapse;margin:12px 0 18px;font-size:14px}th,td{text-align:left;vertical-align:top;padding:10px 12px;border-bottom:1px solid var(--line)}th{background:#f2f5fa;color:#35425b;font-weight:650}tbody tr:last-child td{border-bottom:0}code{font-family:Consolas,monospace;background:#f0f3f8;padding:2px 5px;border-radius:4px;color:#243e75}
+.diagram{display:flex;align-items:stretch;gap:10px;margin:18px 0;flex-wrap:wrap}.node{flex:1;min-width:130px;text-align:center;border:1px solid #cbd8eb;background:#f8faff;border-radius:12px;padding:15px 10px}.node strong{display:block;color:#183c78}.node small{color:var(--muted)}.arrow{align-self:center;color:#7c8aa3;font-size:24px}.pill{display:inline-block;border-radius:99px;background:#e9efff;color:#284fac;padding:2px 10px;font-size:13px;margin:2px}.quote{border-left:4px solid var(--teal);padding:12px 17px;background:#f0faf8;border-radius:8px;font-weight:600}.small{font-size:13px;color:var(--muted)}
+footer{text-align:center;color:var(--muted);font-size:13px;margin-top:24px}
+@media(max-width:760px){.wrap{padding:18px 12px 42px}.hero{padding:28px 24px}main{grid-template-columns:1fr}.toc{position:static;display:grid;grid-template-columns:1fr 1fr;gap:2px 12px}.toc b{grid-column:1/-1}.card{padding:21px 18px}.diagram{gap:6px}.node{min-width:115px}.arrow{font-size:18px}}
+@media print{body{background:white}.wrap{max-width:none;padding:0}.hero,.card,.toc{box-shadow:none}.toc{position:static}main{grid-template-columns:190px 1fr;gap:16px}.card{break-inside:avoid}.hero{border-radius:0}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header class="hero">
+  <div class="eyebrow">5GC · NTN · MEC</div>
+  <h1>星上 MEC、DNAI 与 UPF 选择</h1>
+  <p>围绕管理需求表述、参数示例和信息边界的说明。重点是理清 DNAI、SMF 的 UPF 选择信息、流量引导策略，以及 MEC 部署配置之间的关系。</p>
+  <p style="margin-top:16px;font-size:13px">来源：<a href="https://chatgpt.com/share/6afa6cf2-91bc-83e8-86a0-48cb4fa20d8e">分享对话《更新邻区参数角色解析》</a></p>
+</header>
+<main>
+<nav class="toc"><b>目录</b>
+ <a href="#concepts">1. 基本概念</a><a href="#wording">2. 推荐需求表述</a><a href="#example">3. 参数例子</a><a href="#relation">4. 信息关系</a><a href="#flow">5. 整体流程</a><a href="#caveat">6. 标准化边界</a>
+</nav>
+<article>
+<section class="card" id="concepts">
+ <h2>1. 基本概念：DNAI、UPF 与 DN</h2>
+ <p class="lead">DNAI 标识 DN（Data Network）的用户面接入点；UPF 是实现用户面转发、连接 5GC 与 DN 的网络功能。DNAI 与 UPF 密切相关，但两者不是同一个标识。</p>
+ <table><thead><tr><th>概念</th><th>含义</th></tr></thead><tbody>
+ <tr><td>DN</td><td>数据网络，例如 Internet、企业专网或 MEC 网络。</td></tr>
+ <tr><td>UPF</td><td>负责用户面转发，将 5GC 与 DN 连接起来。</td></tr>
+ <tr><td>DNAI</td><td>标识用户面接入 DN 的位置；不是 UPF ID，也不是 UPF 接口地址。</td></tr>
+ </tbody></table>
+ <div class="diagram"><div class="node"><strong>UE</strong><small>用户设备</small></div><div class="arrow">→ N3 →</div><div class="node"><strong>UPF</strong><small>用户面转发</small></div><div class="arrow">→ N6 →</div><div class="node"><strong>DN / MEC</strong><small>DNAI 标识接入位置</small></div></div>
+ <p>不同 UPF 可能连接不同位置的 DN。例如，星上 UPF 可通过 N6 连接本卫星上的 MEC 网络，地面 UPF 则连接地面 MEC 网络。SMF 会结合业务需要、DNAI、网络策略和拓扑等信息选择合适的 UPF。</p>
+</section>
+<section class="card" id="wording">
+ <h2>2. 推荐的管理需求表述</h2>
+ <p>原句将“DNAI”和“SMF 的 UPF 选择信息”并列，容易被理解为两套互不相关的信息。DNAI 关联关系本身可以属于 SMF 的 UPF 选择信息。</p>
+ <div class="quote">网管需管理星上 MEC 组件的部署和配置，并配置 5GC SMF 所需的 UPF 选择信息（包括 DNAI 与 DN、星上 UPF 及 MEC 服务位置之间的关联关系）以及流量引导策略，使 SMF 能够选择适当的星上 UPF，并将符合策略的业务流量引导至星上 MEC。</div>
+ <h3>这样表述的分工</h3>
+ <ul><li><b>网管：</b>提供相关配置、部署信息和策略。</li><li><b>SMF：</b>根据会话、策略及网络配置执行 UPF 选择。</li><li><b>UPF：</b>按 SMF 下发的转发规则实际转发匹配的业务流量。</li></ul>
+ <div class="note">如果只需简短描述，也可写：网管配置星上 MEC 部署信息、SMF 所需的 UPF 选择信息及流量引导策略，使 SMF 能够选择适当的星上 UPF，并将符合策略的业务流量引导至星上 MEC。</div>
+</section>
+<section class="card" id="example">
+ <h2>3. 参数示例</h2>
+ <p>假设 UE 经卫星接入网络，访问部署在卫星上的 MEC 视频分析应用。运营商希望业务尽可能在星上处理，减少绕回地面数据中心的流量。</p>
+ <h3>3.1 DNAI 及其关联关系</h3>
+ <table><thead><tr><th>参数</th><th>示例值</th><th>含义</th></tr></thead><tbody>
+ <tr><td>DNAI</td><td><code>DNAI-SAT-EDGE-01</code></td><td>星上 MEC 所在 DN 的用户面接入点标识</td></tr>
+ <tr><td>DN 标识</td><td><code>DN-SAT-EDGE-01</code></td><td>星上 MEC 所连接的数据网络</td></tr>
+ <tr><td>关联 UPF</td><td><code>UPF-SAT-01</code></td><td>能够接入该 DN 的星上 UPF</td></tr>
+ <tr><td>MEC 服务位置</td><td><code>SAT-01</code></td><td>MEC 服务部署所在卫星</td></tr>
+ <tr><td>MEC 服务地址</td><td><code>10.10.1.100</code></td><td>视频分析应用服务地址</td></tr>
+ </tbody></table>
+ <h3>3.2 SMF 的 UPF 选择信息</h3>
+ <table><thead><tr><th>参数</th><th>示例值</th><th>含义</th></tr></thead><tbody>
+ <tr><td>DNN</td><td><code>edge.mnc001.mcc460.gprs</code></td><td>UE 请求接入的数据网络名称</td></tr>
+ <tr><td>目标 DNAI</td><td><code>DNAI-SAT-EDGE-01</code></td><td>目标 DN 接入点</td></tr>
+ <tr><td>候选 UPF</td><td><code>UPF-SAT-01</code></td><td>可供 SMF 选择的星上 UPF</td></tr>
+ <tr><td>UPF 部署位置</td><td>Satellite / <code>SAT-01</code></td><td>UPF 的部署类型及所在卫星</td></tr>
+ <tr><td>UPF 可用状态</td><td>Available</td><td>UPF 当前是否可用</td></tr>
+ </tbody></table>
+ <h3>3.3 流量引导策略</h3>
+ <table><thead><tr><th>参数</th><th>示例值</th><th>含义</th></tr></thead><tbody>
+ <tr><td>应用标识</td><td>Video-Analytics</td><td>需要引导的业务</td></tr>
+ <tr><td>目标 DNAI</td><td><code>DNAI-SAT-EDGE-01</code></td><td>业务目标 DN 接入点</td></tr>
+ <tr><td>流量匹配条件</td><td>目的 IP：<code>10.10.1.100</code>；TCP 端口：<code>443</code></td><td>识别需要引导的业务流</td></tr>
+ <tr><td>引导目标</td><td><code>UPF-SAT-01</code></td><td>选择星上 UPF</td></tr>
+ <tr><td>引导动作</td><td>Local Breakout</td><td>将业务流量引导至本地 DN</td></tr>
+ <tr><td>生效条件</td><td>UE 位于指定卫星服务区域且星上 UPF 可用</td><td>限定策略适用条件</td></tr>
+ </tbody></table>
+ <h3>3.4 MEC 组件部署信息</h3>
+ <table><thead><tr><th>参数</th><th>示例值</th><th>含义</th></tr></thead><tbody>
+ <tr><td>MEC 应用标识</td><td><code>MEC-Video-01</code></td><td>视频分析应用</td></tr>
+ <tr><td>部署位置</td><td><code>SAT-01</code></td><td>部署在卫星 SAT-01</td></tr>
+ <tr><td>服务地址</td><td><code>10.10.1.100</code></td><td>应用服务地址</td></tr>
+ <tr><td>运行状态</td><td>Running</td><td>应用运行状态</td></tr>
+ <tr><td>资源配置</td><td>4 vCPU；8 GB 内存</td><td>应用资源配置</td></tr>
+ </tbody></table>
+ <p class="small">上述名称、取值和字段用于说明概念，不代表 3GPP 规定的固定标识格式或规范属性。</p>
+</section>
+<section class="card" id="relation">
+ <h2>4. DNAI 关联信息与 UPF 选择信息的关系</h2>
+ <p class="lead">两者不是完全相同的信息，但有交集和包含关系。</p>
+ <ul><li><b>DNAI 及关联信息：</b>描述目标 DN 接入点、能够连接该 DN 的 UPF，以及对应 MEC 服务位置。</li><li><b>SMF 的 UPF 选择信息：</b>更广泛的信息集合，可包括 DNAI 及相关映射，也可包括 UPF 部署位置、能力、负载和可用性等。</li></ul>
+ <table><thead><tr><th>信息</th><th>示例</th><th>归属/作用</th></tr></thead><tbody>
+ <tr><td>DNAI</td><td><code>DNAI-SAT-01</code></td><td>DNAI 与关联映射</td></tr>
+ <tr><td>DNAI 对应的 DN</td><td><code>DN-SAT-01</code></td><td>DNAI 与关联映射</td></tr>
+ <tr><td>DNAI 可关联的 UPF</td><td><code>UPF-SAT-01</code></td><td>DNAI 与关联映射</td></tr>
+ <tr><td>UPF 部署位置</td><td><code>SAT-01</code>（星上）</td><td>选择 UPF 的辅助信息</td></tr>
+ <tr><td>UPF 可用状态</td><td>Available</td><td>选择 UPF 的辅助信息</td></tr>
+ <tr><td>UPF 负载</td><td>60%</td><td>选择 UPF 的辅助信息</td></tr>
+ </tbody></table>
+ <div class="note good">写管理需求时，建议将 DNAI 与 DN、UPF、MEC 位置的映射作为“SMF 所需 UPF 选择信息”的组成部分；将流量引导策略单独描述。</div>
+</section>
+<section class="card" id="flow">
+ <h2>5. 整体关系与转发流程</h2>
+ <div class="diagram"><div class="node"><strong>网管</strong><small>配置 DNAI 映射、UPF 选择信息、引导策略及 MEC 部署</small></div><div class="arrow">→</div><div class="node"><strong>5GC SMF</strong><small>根据会话、策略和网络配置选择 UPF</small></div><div class="arrow">→ N4</div><div class="node"><strong>星上 UPF</strong><small>执行用户面转发规则</small></div><div class="arrow">→ N6</div><div class="node"><strong>星上 DN / MEC</strong><small>处理业务流量</small></div></div>
+ <ol><li>网管维护 MEC 应用部署及相关网络配置。</li><li>SMF 根据 UE 会话请求、网络配置、策略及 UPF 可用性选择合适 UPF。</li><li>SMF 通过 N4 向 UPF 下发用户面规则。</li><li>UPF 按规则将匹配流量经 N6 转发到 DNAI 所标识的 DN 接入位置，抵达星上 MEC。</li></ol>
+</section>
+<section class="card" id="caveat">
+ <h2>6. 标准化边界</h2>
+ <div class="note warn">以上参数表是便于理解的管理信息示例，不代表所有字段都已在 SA5 NRM 中定义为规范属性。</div>
+ <p>将这段内容作为 TR 28.874 §5.4.2 管理需求的归纳时，不应据此推断该 TR 已完整规定 DNAI 与 UPF、MEC 之间的 NRM 关联模型。标准化时仍需逐项核对现有 IOC 和属性，判断哪些可以复用，哪些构成管理模型缺口。</p>
+ <p><b>建议保留的参数类别：</b></p><ul><li>DNAI 及其与星上 UPF、MEC 服务位置的关联信息；</li><li>SMF 用于选择星上 UPF 的相关信息，例如 UPF 部署位置、卫星标识及可用性；</li><li>流量引导策略，例如业务流匹配条件、目标 DNAI 和引导动作；</li><li>MEC 组件的部署位置、服务地址及部署配置。</li></ul>
+</section>
+</article>
+</main>
+<footer>根据分享对话整理 · 页面可离线打开，也可通过浏览器打印为 PDF</footer>
+</div>
+</body>
+</html>
